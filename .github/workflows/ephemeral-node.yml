@@ -1,0 +1,71 @@
+name: ephemeral-node
+# Nod Linux sekejap (Ubuntu 24.04 runner) dengan sshd + tunnel awam percuma.
+# Guna: Actions > ephemeral-node > Run workflow > isi port.
+# Hidup maksimum 350 minit ikut input `minutes`.
+
+on:
+  workflow_dispatch:
+    inputs:
+      port:
+        description: "Port awam di bore.pub (pilih 20000-60000)"
+        required: true
+        default: "24876"
+      minutes:
+        description: "Umur nod dalam minit (maks 350)"
+        required: true
+        default: "330"
+
+jobs:
+  node:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Pasang sshd + kunci
+        run: |
+          set -eux
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq openssh-server curl tar
+          sudo mkdir -p /run/sshd
+          sudo ssh-keygen -A
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          cat authorized_keys.pub > ~/.ssh/authorized_keys
+          chmod 600 ~/.ssh/authorized_keys
+          sudo tee /etc/ssh/sshd_config.d/99-node.conf >/dev/null <<'EOF'
+          PasswordAuthentication no
+          KbdInteractiveAuthentication no
+          PermitEmptyPasswords no
+          PubkeyAuthentication yes
+          AllowUsers ubuntu
+          EOF
+          sudo /usr/sbin/sshd -t
+          sudo /usr/sbin/sshd
+          sleep 2
+          ss -ltnp | grep ':22' || (echo "sshd GAGAL" && exit 1)
+
+      - name: Pasang bore + buka tunnel awam
+        run: |
+          set -eux
+          curl -sL -o /tmp/bore.tar.gz \
+            https://github.com/ekzhang/bore/releases/download/v0.6.0/bore-v0.6.0-x86_64-unknown-linux-musl.tar.gz
+          tar xzf /tmp/bore.tar.gz -C /tmp
+          chmod +x /tmp/bore
+          /tmp/bore --version || true
+          nohup /tmp/bore local 22 --to bore.pub --port "${{ inputs.port }}" \
+            > /tmp/bore.log 2>&1 &
+          sleep 12
+          echo "----- bore.log -----"
+          cat /tmp/bore.log
+          echo "-------------------"
+          if ! grep -qi "listening\|remote" /tmp/bore.log; then
+            echo "::error::bore gagal buka tunnel (port mungkin terpakai)"
+            exit 1
+          fi
+          echo "SSH: ssh -p ${{ inputs.port }} ubuntu@bore.pub"
+
+      - name: Tahan hidup
+        run: |
+          echo "Nod hidup. Tamat pada $(date -u -d "+${{ inputs.minutes }} minutes" '+%F %T UTC')"
+          sleep "$(( ${{ inputs.minutes }} * 60 ))"
