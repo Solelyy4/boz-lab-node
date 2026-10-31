@@ -1,27 +1,25 @@
 name: ephemeral-node
-# Nod Linux sekejap (Ubuntu 24.04 runner) dengan sshd + tunnel awam percuma.
-# Guna: Actions > ephemeral-node > Run workflow > isi port.
-# Hidup maksimum 350 minit ikut input `minutes`.
+# Nod Linux sekejap (Ubuntu) dengan sshd + tunnel awam percuma (bore.pub).
+# Hidup ikut input `minutes` (maks 350). Alamat SSH dilaporkan ke issue "node-status".
 
 on:
   workflow_dispatch:
     inputs:
-      port:
-        description: "Port awam di bore.pub (pilih 20000-60000)"
-        required: true
-        default: "24876"
       minutes:
         description: "Umur nod dalam minit (maks 350)"
         required: true
-        default: "330"
+        default: "120"
+
+permissions:
+  contents: read
+  issues: write
 
 jobs:
   node:
     runs-on: ubuntu-latest
     timeout-minutes: 360
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Pasang sshd + kunci
         run: |
@@ -30,44 +28,54 @@ jobs:
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq openssh-server curl tar
           sudo mkdir -p /run/sshd
           sudo ssh-keygen -A
-          mkdir -p ~/.ssh && chmod 700 ~/.ssh
-          cat authorized_keys.pub > ~/.ssh/authorized_keys
-          chmod 600 ~/.ssh/authorized_keys
-          sudo tee /etc/ssh/sshd_config.d/99-node.conf >/dev/null <<'EOF'
-          PasswordAuthentication no
-          KbdInteractiveAuthentication no
-          PermitEmptyPasswords no
-          PubkeyAuthentication yes
-          AllowUsers ubuntu
-          EOF
+          mkdir -p "$HOME/.ssh"; chmod 700 "$HOME/.ssh"
+          tr -d '\r' < authorized_keys.pub > "$HOME/.ssh/authorized_keys"
+          chmod 600 "$HOME/.ssh/authorized_keys"
+          printf '%s\n' \
+            'PasswordAuthentication no' \
+            'KbdInteractiveAuthentication no' \
+            'PermitEmptyPasswords no' \
+            'PubkeyAuthentication yes' \
+            | sudo tee /etc/ssh/sshd_config.d/99-node.conf >/dev/null
           sudo /usr/sbin/sshd -t
-          sudo /usr/sbin/sshd
-          sleep 2
-          ss -ltnp | grep ':22' || (echo "sshd GAGAL" && exit 1)
+          sudo systemctl restart ssh 2>/dev/null || sudo systemctl restart sshd 2>/dev/null || sudo /usr/sbin/sshd
+          sleep 3
+          ss -ltn | grep -q ':22 ' && echo "sshd OK" || (echo "::error::sshd tidak mendengar"; exit 1)
+          echo "--- authorized_keys di nod ---"
+          wc -l "$HOME/.ssh/authorized_keys"
+          cut -c1-40 "$HOME/.ssh/authorized_keys"
 
-      - name: Pasang bore + buka tunnel awam
+      - name: Buka tunnel awam (bore)
         run: |
           set -eux
-          curl -sL -o /tmp/bore.tar.gz \
-            https://github.com/ekzhang/bore/releases/download/v0.6.0/bore-v0.6.0-x86_64-unknown-linux-musl.tar.gz
+          curl -sL -o /tmp/bore.tar.gz https://github.com/ekzhang/bore/releases/download/v0.6.0/bore-v0.6.0-x86_64-unknown-linux-musl.tar.gz
           tar xzf /tmp/bore.tar.gz -C /tmp
           chmod +x /tmp/bore
-          /tmp/bore --version || true
-          nohup /tmp/bore local 22 --to bore.pub --port "${{ inputs.port }}" \
-            > /tmp/bore.log 2>&1 &
-          sleep 12
-          echo "----- bore.log -----"
+          nohup /tmp/bore local 22 --to bore.pub > /tmp/bore.log 2>&1 &
+          for i in $(seq 1 20); do
+            sleep 3
+            grep -qi "listening at" /tmp/bore.log && break
+          done
           cat /tmp/bore.log
-          echo "-------------------"
-          if ! grep -qi "listening\|remote" /tmp/bore.log; then
-            echo "::error::bore gagal buka tunnel (port mungkin terpakai)"
-            exit 1
+          PORT=$(grep -oE 'listening at bore.pub:[0-9]+' /tmp/bore.log | grep -oE '[0-9]+$' | head -1)
+          [ -n "$PORT" ] || { echo "::error::bore tidak beri port"; exit 1; }
+          echo "PORT=$PORT" >> "$GITHUB_ENV"
+          echo "ssh -p $PORT runner@bore.pub"
+
+      - name: Lapor alamat SSH ke issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eu
+          BODY=$(printf 'Nod hidup. Tamat: %s\n\n```\nssh -p %s runner@bore.pub\n```\n\nRun: %s/%s/actions/runs/%s\n' \
+            "$(date -u -d "+${{ inputs.minutes }} minutes" '+%F %T UTC')" "$PORT" \
+            "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")
+          NUM=$(gh issue list --search 'node-status in:title' --json number --jq '.[0].number' 2>/dev/null || true)
+          if [ -n "${NUM:-}" ]; then
+            gh issue close "$NUM" -c "diganti nod baru" >/dev/null 2>&1 || true
           fi
-          echo "SSH: ssh -p ${{ inputs.port }} ubuntu@bore.pub"
+          gh issue create --title "node-status" --body "$BODY" >/dev/null
+          echo "laporan issue selesai: port $PORT"
 
       - name: Tahan hidup
-        run: |
-          echo "Nod hidup. Tamat pada $(date -u -d "+${{ inputs.minutes }} minutes" '+%F %T UTC')"
-          sleep "$(( ${{ inputs.minutes }} * 60 ))"
-
-# rev2
+        run: sleep "$(( ${{ inputs.minutes }} * 60 ))"
