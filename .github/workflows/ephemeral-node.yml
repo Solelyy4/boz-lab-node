@@ -2,6 +2,7 @@ name: ephemeral-node
 # Nod Linux percuma atas permintaan: Ubuntu 24.04 + sshd + tunnel awam port TETAP.
 # node.sh  = sediakan sshd + tunnel (fail sama boleh dipakai pada VPS sebenar)
 # state.sh = pulihkan & segerakkan ~/persist supaya kerja tak hilang bila nod berganti
+# start.sh = (dalam ~/persist) dipanggil automatik supaya proses kau hidup semula
 # Alamat SSH dilaporkan ke issue "node-status".
 
 on:
@@ -27,6 +28,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Langkah ini BLOK sampai tunnel dapat port — jadi bila ia habis,
+      # kita sahkan nod ini ialah nod yang hidup (bukan yang menunggu).
       - name: Sediakan nod
         env:
           NODE_PORT: ${{ inputs.port }}
@@ -44,6 +47,19 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO_SLUG: ${{ github.repository }}
         run: bash state.sh restore
+
+      # Selepas fail pulih barulah proses dijalankan — bot perlukan failnya dahulu.
+      - name: Mula semula proses kau
+        continue-on-error: true
+        run: |
+          if [ -x "$HOME/persist/start.sh" ]; then
+            nohup bash "$HOME/persist/start.sh" > /tmp/start.log 2>&1 &
+            echo "start.sh dijalankan (pid $!)"
+            sleep 3
+            tail -5 /tmp/start.log || true
+          else
+            echo "tiada ~/persist/start.sh — langkau"
+          fi
 
       - name: Lapor alamat ke issue
         env:
