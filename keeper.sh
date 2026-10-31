@@ -26,6 +26,27 @@ else log "gh tidak dijumpai"; exit 1; fi
 
 now=$(date -u +%s)
 
+# 0. Port benar-benar menjawab? Run boleh "in_progress" sedangkan tunnel mati.
+#    Dua kegagalan berturut (≈20 min) barulah diganti, supaya tidak berdenyut
+#    semasa nod baru sedang boot.
+port_open() { timeout 12 bash -c "exec 3<>/dev/tcp/bore.pub/$PORT" 2>/dev/null; }
+FAILF="$HOME/.boz-node/port_fails"
+if port_open; then
+  rm -f "$FAILF"
+else
+  n=$(( $(cat "$FAILF" 2>/dev/null || echo 0) + 1 ))
+  echo "$n" > "$FAILF"
+  log "port $PORT tidak menjawab (kegagalan ke-$n)"
+  if [ "$n" -ge 2 ] || [ "${1:-}" = "--force" ]; then
+    log "tunnel mati walaupun run hidup — hantar pengganti"
+    date -u +%s > "$HOME/.boz-node/last_dispatch"
+    "$GH" workflow run "$WF" --repo "$REPO" -f minutes="$MINUTES" -f port="$PORT" >/dev/null 2>&1 \
+      && log "pengganti dihantar (port mati)" || log "GAGAL menghantar pengganti"
+    rm -f "$FAILF"
+    exit 0
+  fi
+fi
+
 # 1. Jangan hantar dua pengganti berturut-turut.
 STAMP="$HOME/.boz-node/last_dispatch"
 if [ -f "$STAMP" ] && [ "${1:-}" != "--force" ]; then

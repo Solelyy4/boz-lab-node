@@ -27,7 +27,11 @@ save() {
   [ -n "${GH_TOKEN:-}" ] || die "GH_TOKEN kosong"
   mkdir -p "$SRC"
   rm -rf "$WORK"; mkdir -p "$WORK"; cd "$WORK" || die "cd gagal"
-  tar czf - -C "$SRC" . | openssl enc -aes-256-cbc -pbkdf2 -salt -pass env:PASS -out state.tar.enc \
+  # Rahsia TIDAK masuk blob: .env, secrets/, log, pid. Ia datang dari GitHub
+  # Actions secrets pada setiap boot, jadi ia tidak pernah tersimpan di repo.
+  tar czf - -C "$SRC" \
+    --exclude='./.env' --exclude='./secrets' --exclude='*.log' --exclude='*.pid' . \
+    | openssl enc -aes-256-cbc -pbkdf2 -salt -pass env:PASS -out state.tar.enc \
     || die "sulitkan gagal"
   git init -q
   git config user.email node@local; git config user.name node

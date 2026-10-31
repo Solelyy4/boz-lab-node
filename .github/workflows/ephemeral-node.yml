@@ -48,6 +48,30 @@ jobs:
           REPO_SLUG: ${{ github.repository }}
         run: bash state.sh restore
 
+      # Kunci provider datang dari Actions secrets, bukan dari blob simpanan.
+      - name: Tulis kunci ke .env
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          TOKENOMIX_API_KEY: ${{ secrets.TOKENOMIX_API_KEY }}
+          TOKENHARBOR_KEY: ${{ secrets.TOKENHARBOR_KEY }}
+        run: |
+          umask 077
+          mkdir -p "$HOME/persist/secrets"
+          {
+            printf 'TELEGRAM_BOT_TOKEN=%s\n' "$TELEGRAM_BOT_TOKEN"
+            printf 'GEMINI_API_KEY=%s\n'     "$GEMINI_API_KEY"
+            printf 'GROQ_API_KEY=%s\n'       "$GROQ_API_KEY"
+            printf 'TOKENOMIX_API_KEY=%s\n'  "$TOKENOMIX_API_KEY"
+            printf 'HERMES_HOME=%s\n'        "$HOME/persist"
+            printf 'TELEKEY_PORT=8766\n'
+          } > "$HOME/persist/.env"
+          chmod 600 "$HOME/persist/.env"
+          printf '%s' "$TOKENHARBOR_KEY" > "$HOME/persist/secrets/tokenharbor.key"
+          chmod 600 "$HOME/persist/secrets/tokenharbor.key"
+          echo "kunci ditulis (nilai tidak dicetak): $(wc -l < "$HOME/persist/.env") baris"
+
       # Selepas fail pulih barulah proses dijalankan — bot perlukan failnya dahulu.
       - name: Mula semula proses kau
         continue-on-error: true

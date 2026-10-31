@@ -56,20 +56,27 @@ Kalau SSH tersangkut: tunggu 2 minit dan cuba lagi. Penjaga akan pulihkan sendir
 
 ---
 
-## Bot Telegram
+## Bot Telegram — TeleKey kau sebagai penunggu
 
-Nod boleh menjalankan bot yang hidup walaupun laptop kau tutup. Bot itu mati bersama mesin
-lama dan dihidupkan semula oleh `start.sh` pada mesin baharu — dalam ~1–2 minit.
+Telegram hanya benarkan **satu poller bagi setiap token**. TeleKey kau sudah poll di PC, jadi
+nod ini bukan pengganti — ia **penunggu**:
 
-```bash
-bash set-bot.sh "1234567890:AAF..."
-```
+| Keadaan | Siapa layan pengguna |
+|---|---|
+| PC hidup (nadi < 3 min) | TeleKey di PC. Nod senyap sepenuhnya |
+| Laptop tutup > 3 min | Nod ambil alih poll |
+| Laptop hidup semula | Nod lepas poll dalam ~45 saat, PC ambil balik |
 
-**Token mesti bot berasingan.** Telegram hanya benarkan **satu poller bagi setiap token**.
-Token TeleKey sudah dipoll di PC kau — guna token itu pada nod akan menyebabkan kedua-duanya
-berkelahi (`409 Conflict`) dan TeleKey kau terputus. Buat bot baharu di @BotFather (2 minit).
+Nadi ditulis oleh cron `boz-node-heartbeat` (tiap minit) ke gist, dan dibaca nod dengan
+cache-buster (`?cb=<epoch>`) kerana `gist.githubusercontent.com` di-cache CDN ~5 minit.
 
-Fail bot kau: `~/persist/bot.py` (contoh ada di kit) — tiada pakej luar, stdlib sahaja.
+Kunci provider **tidak** disimpan dalam blob simpanan — ia datang dari GitHub Actions secrets
+pada setiap boot (`TELEGRAM_BOT_TOKEN`, `GEMINI_API_KEY`, `GROQ_API_KEY`, `TOKENOMIX_API_KEY`,
+`TOKENHARBOR_KEY`).
+
+**Had yang perlu kau tahu:** `keys.db` bercabang. Kunci API yang dicipta melalui Telegram
+*semasa laptop mati* (bot di nod) akan hilang bila laptop hidup semula, kerana PC pegang
+salinan sendiri. Guna `/getkey` hanya bila laptop hidup.
 
 ---
 
