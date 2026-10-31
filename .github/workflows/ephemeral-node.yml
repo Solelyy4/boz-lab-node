@@ -1,6 +1,7 @@
 name: ephemeral-node
-# Nod Linux sekejap (Ubuntu) dengan sshd + tunnel awam percuma (bore.pub).
-# Hidup ikut input `minutes` (maks 350). Alamat SSH dilaporkan ke issue "node-status".
+# Hos Linux percuma atas permintaan: Ubuntu 24.04, sshd + tunnel awam.
+# Semua logik ada dalam node.sh — fail yang SAMA boleh dipakai pada VPS sebenar.
+# Alamat SSH dilaporkan ke issue "node-status".
 
 on:
   workflow_dispatch:
@@ -21,61 +22,28 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Pasang sshd + kunci
+      - name: Sediakan nod
         run: |
           set -eux
-          sudo apt-get update -qq
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq openssh-server curl tar
-          sudo mkdir -p /run/sshd
-          sudo ssh-keygen -A
-          mkdir -p "$HOME/.ssh"; chmod 700 "$HOME/.ssh"
-          tr -d '\r' < authorized_keys.pub > "$HOME/.ssh/authorized_keys"
-          chmod 600 "$HOME/.ssh/authorized_keys"
-          printf '%s\n' \
-            'PasswordAuthentication no' \
-            'KbdInteractiveAuthentication no' \
-            'PermitEmptyPasswords no' \
-            'PubkeyAuthentication yes' \
-            | sudo tee /etc/ssh/sshd_config.d/99-node.conf >/dev/null
-          sudo /usr/sbin/sshd -t
-          sudo systemctl restart ssh 2>/dev/null || sudo systemctl restart sshd 2>/dev/null || sudo /usr/sbin/sshd
-          sleep 3
-          ss -ltn | grep -q ':22 ' && echo "sshd OK" || (echo "::error::sshd tidak mendengar"; exit 1)
-          echo "--- authorized_keys di nod ---"
-          wc -l "$HOME/.ssh/authorized_keys"
-          cut -c1-40 "$HOME/.ssh/authorized_keys"
+          bash -n node.sh
+          sudo bash node.sh install
+          sudo bash node.sh status
+          sudo bash node.sh url | tee /tmp/url.txt
+          [ -s /tmp/url.txt ] || { echo "::error::tiada alamat"; exit 1; }
 
-      - name: Buka tunnel awam (bore)
-        run: |
-          set -eux
-          curl -sL -o /tmp/bore.tar.gz https://github.com/ekzhang/bore/releases/download/v0.6.0/bore-v0.6.0-x86_64-unknown-linux-musl.tar.gz
-          tar xzf /tmp/bore.tar.gz -C /tmp
-          chmod +x /tmp/bore
-          nohup /tmp/bore local 22 --to bore.pub > /tmp/bore.log 2>&1 &
-          for i in $(seq 1 20); do
-            sleep 3
-            grep -qi "listening at" /tmp/bore.log && break
-          done
-          cat /tmp/bore.log
-          PORT=$(grep -oE 'listening at bore.pub:[0-9]+' /tmp/bore.log | grep -oE '[0-9]+$' | head -1)
-          [ -n "$PORT" ] || { echo "::error::bore tidak beri port"; exit 1; }
-          echo "PORT=$PORT" >> "$GITHUB_ENV"
-          echo "ssh -p $PORT runner@bore.pub"
-
-      - name: Lapor alamat SSH ke issue
+      - name: Lapor alamat ke issue
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -eu
-          BODY=$(printf 'Nod hidup. Tamat: %s\n\n```\nssh -p %s runner@bore.pub\n```\n\nRun: %s/%s/actions/runs/%s\n' \
-            "$(date -u -d "+${{ inputs.minutes }} minutes" '+%F %T UTC')" "$PORT" \
-            "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")
+          URL=$(cat /tmp/url.txt)
+          END=$(date -u -d "+${{ inputs.minutes }} minutes" '+%F %T UTC')
+          BODY=$(printf 'Nod hidup. Tamat: %s\n\n```\n%s\n```\n\nRun: %s/%s/actions/runs/%s\n' \
+            "$END" "$URL" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")
           NUM=$(gh issue list --search 'node-status in:title' --json number --jq '.[0].number' 2>/dev/null || true)
-          if [ -n "${NUM:-}" ]; then
-            gh issue close "$NUM" -c "diganti nod baru" >/dev/null 2>&1 || true
-          fi
+          if [ -n "${NUM:-}" ]; then gh issue close "$NUM" -c "diganti nod baru" >/dev/null 2>&1 || true; fi
           gh issue create --title "node-status" --body "$BODY" >/dev/null
-          echo "laporan issue selesai: port $PORT"
+          echo "dilaporkan: $URL"
 
       - name: Tahan hidup
         run: sleep "$(( ${{ inputs.minutes }} * 60 ))"
