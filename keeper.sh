@@ -54,4 +54,4 @@ fi
 
 "$GH" workflow run "$WF" --repo "$REPO" -f minutes="$MINUTES" -f port="$PORT" >/dev/null 2>&1 \
   && { date -u +%s > "$STAMP"; log "pengganti dihantar (port $PORT, $MINUTES min)"; } \
-  || log "GAGAL menghantar pengganti"
+  || { log "GAGAL menghantar pengganti"; echo "keeper: GAGAL menghantar pengganti nod — semak $LOG"; }

@@ -1,105 +1,128 @@
 # BUKTI — log ujian sebenar
 
-Semua di bawah ialah keluaran sebenar tool, bukan jangkaan. Tarikh: 31 Okt / 1 Nov 2026
-(UTC 21:30–21:45 · WIB 04:30–04:45).
+Semua keluaran di bawah dari tool, bukan jangkaan. 31 Okt – 1 Nov 2026 (UTC 21:30–22:25).
 
 ---
 
-## 1. `bore.pub` buka tunnel (log GitHub Actions, run 41243904590)
+## 1. `bore.pub` beri port tepat yang diminta
 
 ```
-+ /tmp/bore --version
-bore-cli 0.6.0
-+ nohup /tmp/bore local 22 --to bore.pub --port 24876
-INFO bore_cli::client: connected to server remote_port=24876
-INFO bore_cli::client: listening at bore.pub:24876
++ nohup /tmp/bore local 22 --to bore.pub --port 45001
+INFO bore_cli::client: connected to server remote_port=45001
+INFO bore_cli::client: listening at bore.pub:45001
 ```
 
-## 2. SSH sebenar masuk ke mesin (bukan VPS, bukan kad)
+Issue yang dilaporkan workflow:
 
 ```
-$ ssh -p 1739 -i keys/boz_lab runner@bore.pub '...'
+EXPIRES_UTC=1793484218
+PORT=45001
+```
+
+## 2. SSH sebenar masuk (mesin 2 core / 8 GB)
+
+```
+$ ssh -p 1739 -i keys/boz_lab runner@bore.pub
 USER=runner
 runnervm48cm3
 OS=Ubuntu 24.04.5 LTS
 2
-Mem:            7932         848        6107          45        1278        7084
-/dev/root        72G   59G   13G  83% /
- 21:37:37 up 3 min,  1 user,  load average: 0.20, 0.23, 0.10
+Mem:            7932         848        6107
 ```
 
-## 3. Password auth ditolak (hanya publickey ditawarkan)
+## 3. Password auth ditolak — hanya publickey
 
 ```
 $ ssh -p 62518 -o PreferredAuthentications=password -o PubkeyAuthentication=no runner@bore.pub
 runner@bore.pub: Permission denied (publickey).
 ```
 
-Sebelum fix, sshd tawarkan `(publickey,password)` — selepas drop-in dinamakan `00-`,
-hanya `(publickey)`.
+## 4. PERTUKARAN NOD — alamat sama, mesin lain, jeda 40 saat
 
-## 4. `node.sh` — pasang, keluar alamat, uji masuk
-
-```
-$ sudo bash node.sh install
- · boz-node: menyediakan runnervm48cm3 (x86_64)
-  ✓ kunci awam didaftarkan untuk user 'runner'
-  ✓ sshd aktif di port 22 — login kunci sahaja
-  ✓ tunnel awam: ssh -p 62518 runner@bore.pub
-
-$ ssh -p 62518 ... runner@bore.pub 'whoami; hostname'
-OK user=runner host=runnervm48cm3
-Ubuntu 24.04.5 LTS
-```
-
-## 5. Kebolehtularan — `install` dijalankan 2×, `status` semua hijau
+Nod lama tamat 22:03:38 UTC. Log pantauan berturut-turut:
 
 ```
-=== install kali-1 ===   ssh -p 3136 runner@bore.pub
-=== install kali-2 ===   ssh -p 12562 runner@bore.pub
-
-=== status ===
-  ✓ sshd: mendengar di port 22
-  ✓ login password: dimatikan
-  ✓ kunci awam: terdaftar (runner)
-  ✓ tunnel: hidup (7s) — ssh -p 12562 runner@bore.pub
+22:03:22 6: runnervm48cm3 up=579            <- mesin lama
+22:03:51 7: Connection timed out ...        <- nod lama mati (jeda)
+22:04:18 8: WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!
+          fingerprint: SHA256:WKwORsrWxxuVS8a9iJDCVXctD3gBAz2f04jaVZxRbGk
+          runnervm48cm3 up=444              <- sshd LAIN di port 45001 yang SAMA
 ```
 
-## 6. `spin-up.sh` — satu arahan dari Windows
+Host key berubah = proses sshd yang berbeza = mesin berbeza. Port kekal `45001`.
+
+Perkakasan juga berubah selepas repo dijadikan awam:
 
 ```
-$ bash spin-up.sh 120 --test
-  · menghidupkan nod (120 minit) di Solelyy4/boz-lab-node
-  · menunggu nod siap
-  ✓ nod hidup
-     ssh -p 63230 runner@bore.pub
-  ✓ SSH BERJAYA
-     runner@runnervm48cm3
-     Ubuntu 24.04.5 LTS
-     2
-     Mem:  7932  877  6365
+sebelum: 2 core / 7932 MB
+selepas: 4 core / 15983 MB
 ```
 
-## 7. Bug yang ditemui & dibaiki (semasa ujian, bukan teori)
+## 5. Fail kerja pulih automatik merentas pertukaran
+
+Ditulis pada mesin lama (22:08:55 UTC), kemudian nod 5-minit mengambil alih port 45001:
+
+```
+$ ssh -p 45001 ... 'ls ~/persist/projek; cat ~/persist/projek/nota.txt'
+nombor.txt
+nota.txt
+ditulis pada Sat Oct 31 22:08:55 UTC 2026
+```
+
+Fail itu ditulis pada mesin SEBELUM `state.sh` berjalan. Ia kembali pada mesin baru
+tanpa arahan manual — langkah "Pulihkan fail kerja" dalam workflow.
+
+## 6. Simpanan tersulit di branch `state`
+
+```
+disimpan: 2 fail, 272 bait
+
+$ gh api repos/Solelyy4/boz-lab-node/contents/state.tar.enc?ref=state
+saiz: 272 bait
+```
+
+Kesegaran (interval 120s):
+
+```
+state branch commit terakhir : 2026-10-31T22:17:47Z
+semakan pada                 : 2026-10-31T22:19:30Z
+proses: 2483 bash state.sh watch
+```
+
+## 7. Pembungkus `boz-ssh.sh`
+
+```
+$ bash boz-ssh.sh 'whoami; nproc; ls ~/persist/projek'
+MASUK: runner@runnervm48cm3
+core=4
+nombor.txt
+nota.txt
+
+$ printf 'whoami\n' | bash boz-ssh.sh
+runner
+```
+
+## 8. Bug yang ditemui semasa ujian
 
 | # | Gejala | Punca | Fix |
 |---|---|---|---|
-| 1 | `Permission denied (publickey,password)` walau kunci betul | drop-in tulis `AllowUsers ubuntu`, runner sebenar `runner` | buang `AllowUsers` |
-| 2 | Password auth kekal hidup walau drop-in `PasswordAuthentication no` | `sshd_config.d` ikut abjad, **nilai pertama menang**; `50-cloud-init.conf` mendahului `99-` | nama fail `00-boz-node.conf` |
-| 3 | `bore mati: failed to run command '  · memuat turun bore...'` | `echo` status mencemari `$(bore_bin)` | status ke stderr |
+| 1 | `Permission denied (publickey,password)` | drop-in `AllowUsers ubuntu`, runner sebenar `runner` | buang `AllowUsers` |
+| 2 | Password auth kekal hidup | `sshd_config.d` ikut abjad, **nilai pertama menang**; `50-cloud-init.conf` mendahului `99-` | nama fail `00-boz-node.conf` |
+| 3 | `$(bore_bin)` rosak | `echo` status mencemari stdout | mesej ke stderr |
+| 4 | `No environment variable PASS` | `openssl -pass env:PASS` baca persekitaran proses, `PERSIST_PASS` tak di-export | `export PASS` |
+| 5 | `hostname contains invalid characters` | arahan jauh dihantar sebelum hos | susun semula argumen `boz-ssh.sh` |
+| 6 | Penjaga tersalah tolak | anggap nod semasa = pengganti | penanda `last_dispatch` setempat |
 
-## 8. Yang TIDAK diuji (jujur)
+## 9. Yang TIDAK diuji (jujur)
 
-- **Oracle Cloud** — tidak didaftarkan. Langkah bertulis sahaja, belum dijalankan.
-- **`muse_tunnel.sh` pada sandbox sebenar** — tiada sandbox muse.ai di sini. Yang disahkan:
-  `bash -n` lulus, dan audit kandungan fail.
-- **Jalur 1 (PC jadi hujung tunnel)** — PC ni tiada admin, tiada sshd, tiada Tailscale.
-  Tidak dipasang.
-- **Jangka hayat >350 minit** — had GitHub Actions, bukan had kod.
+- **Pertukaran automatik 5j50m penuh** — diuji dengan nod 5-minit, bukan kitaran penuh.
+  Mekanismenya sama; yang belum terbukti ialah ketahanan berhari-hari.
+- **Oracle / Azure** — tidak didaftarkan. Langkah bertulis sahaja.
+- **`muse_tunnel.sh` pada sandbox muse.ai sebenar** — tiada sandbox di sini.
+- **Jalur 1 (PC jadi hujung tunnel)** — PC tiada admin, tiada sshd, tiada Tailscale.
 
-## 9. Pembetulan pada dakwaan awal
+## 10. Pembetulan pada dakwaan awal
 
-Aku mula-mula lapor dua "bug" dalam `muse_tunnel.sh` (baris `Proxy-Authorization` dan corak
-`sk-...@openssh.com`). Selepas periksa bait fail mentah: **kedua-duanya tidak wujud**.
-Rentetan `***` itu ialah lapisan redaksi pada output tool, bukan isi fail. Fail asal digunakan
-semula tanpa perubahan — md5 `179574f865760ac2d93910d6b7780012`.
+Aku mula-mula lapor dua "bug" dalam `muse_tunnel.sh`. Selepas periksa bait fail mentah:
+**kedua-duanya tidak wujud**. `***` itu lapisan redaksi pada output tool, bukan isi fail.
+Fail asal digunakan semula tanpa perubahan — md5 `179574f865760ac2d93910d6b7780012`.

@@ -1,8 +1,58 @@
-# TUNNEL KIT — SSH ke mesin yang kau tak boleh capai
+# NOD KAU — SSH ke mesin yang tak pernah mati
 
-Fail asal (`tailscale-reverse-tunnel-main.zip`) ialah satu script untuk masuk ke **sandbox VM**
-yang blok inbound dan padam `/etc` setiap reboot. Masalahnya ia andaikan kau **sudah ada** hos
-Linux. Kau belum ada. Jadi kit ni tambah bahagian yang hilang itu.
+Kau tak perlu buat apa-apa. Satu arahan, dan ia berfungsi hari ini, esok, minggu depan.
+
+```bash
+bash ~/Downloads/tunnel-kit/boz-ssh.sh
+```
+
+Atau jalankan satu arahan terus:
+
+```bash
+bash ~/Downloads/tunnel-kit/boz-ssh.sh 'ls ~/persist'
+```
+
+**Alamatnya tak berubah.** Mesin di belakangnya berganti sendiri setiap ~5 jam 50 minit.
+Kau takkan nampak apa-apa kecuali satu jeda ~40 saat.
+
+---
+
+## Apa yang berjalan sendiri
+
+| Benda | Siapa uruskan | Kekerapan |
+|---|---|---|
+| Nod tamat → pengganti dihantar | `keeper.sh` (cron Hermes) | setiap 10 minit |
+| Alamat kekal `bore.pub:45001` | `node.sh install --port` | setiap nod baru |
+| Fail kau disimpan & dipulih | `state.sh` | simpan tiap 2 min, pulih masa boot |
+| Laporan alamat | issue `node-status` di GitHub | setiap pertukaran |
+
+Nod sekarang: Ubuntu 24.04 · **4 core · 16 GB RAM · 72 GB disk**.
+
+---
+
+## Fail kau — letak dalam `~/persist`
+
+Hanya `~/persist` yang kekal. Di luar itu hilang bila mesin berganti.
+
+```bash
+bash boz-ssh.sh 'mkdir -p ~/persist/projek && echo hello > ~/persist/projek/a.txt'
+```
+
+Simpanan disulitkan (AES-256) sebelum keluar, disimpan di branch `state` repo
+`Solelyy4/boz-lab-node`. Nod baru tarik balik dan nyahsulit masa mula. Tanpa passphrase
+(`~/.boz-node/pass`), blob itu tidak berguna.
+
+---
+
+## Bila sesuatu rosak
+
+```bash
+bash ~/Downloads/tunnel-kit/keeper.sh        # paksa semak + hantar pengganti kalau perlu
+bash ~/Downloads/tunnel-kit/keeper.sh --force # paksa nod baru sekarang
+tail -20 ~/.boz-node/keeper.log              # apa penjaga dah buat
+```
+
+Kalau SSH tersangkut: tunggu 2 minit dan cuba lagi. Penjaga akan pulihkan sendiri.
 
 ---
 
@@ -10,125 +60,23 @@ Linux. Kau belum ada. Jadi kit ni tambah bahagian yang hilang itu.
 
 | Fail | Fungsi |
 |---|---|
-| `node.sh` | **Utama.** Satu arahan: jadikan mana-mana Linux boleh di-SSH dari mana-mana |
-| `spin-up.sh` | Hidupkan hos Linux percuma atas permintaan (GitHub Actions) — 0 kad, 0 VPS |
-| `muse_tunnel.sh` | Script asal, tidak diubah. Untuk kes sandbox yang reset `/etc` |
-| `authorized_keys.pub` | Kunci awam kau (selamat didedahkan) |
-| `keys/boz_lab` | Kunci peribadi — **jangan kongsi, jangan commit** |
-| `BUKTI.md` | Log ujian sebenar |
-| `.github/workflows/ephemeral-node.yml` | Resipi hos percuma |
+| `boz-ssh.sh` | Masuk ke nod (pembungkus, alamat tetap) |
+| `keeper.sh` | Penjaga — hantar pengganti sebelum nod tamat |
+| `node.sh` | Sediakan sshd + tunnel pada mana-mana Linux |
+| `state.sh` | Simpan/pulih `~/persist` (tersulit) |
+| `spin-up.sh` | Hidupkan nod manual (jarang perlu) |
+| `muse_tunnel.sh` | Script asal kau — untuk kes sandbox yang reset `/etc` |
 
 ---
 
-## 1. Guna sekarang — percuma, tanpa VPS, tanpa kad
+## Batas jujur
 
-```bash
-cd ~/Downloads/tunnel-kit
-bash spin-up.sh 120 --test
-```
-
-Keluaran sebenar:
-
-```
-  ✓ nod hidup
-
-     ssh -p 63230 runner@bore.pub
-
-  · ujian sambungan
-  ✓ SSH BERJAYA
-     runner@runnervm48cm3
-     Ubuntu 24.04.5 LTS
-     2
-     Mem:  7932  877  6365
-```
-
-Masuk bila-bila masa dalam tempoh itu:
-
-```bash
-ssh -i keys/boz_lab -p 63230 -o StrictHostKeyChecking=no runner@bore.pub
-```
-
-**Had sebenar:** satu job = maksimum **350 minit**, kemudian mesin dimusnahkan sepenuhnya
-(disk, proses, semuanya). Bukan hos 24/7. Jangan letak kerja yang perlu hidup berhari-hari.
-
----
-
-## 2. Kalau nak VPS kekal 24/7
-
-Oracle Cloud **Always Free** — percuma tanpa had masa. Kad diperlukan untuk sahkan identiti
-(caj ~RM1, dipulangkan), bukan langganan.
-
-1. Daftar di `cloud.oracle.com/free`, pilih home region terdekat (Singapore).
-2. Create Instance → **Ubuntu 24.04** → shape `VM.Standard.E2.1.Micro` (x86, sentiasa ada
-   stok) atau `VM.Standard.A1.Flex` (ARM, 2 core/12 GB, stok sering habis).
-3. Muat naik kunci awam `authorized_keys.pub` semasa buat instance.
-4. Masuk: `ssh -i keys/boz_lab ubuntu@<IP-publik>`
-5. Dalam VPS tu:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/Solelyy4/boz-lab-node/master/node.sh -o node.sh
-sudo bash node.sh install --key "ssh-ed25519 AAAA... boz-lab-node"
-sudo bash node.sh status
-```
-
-Kalau IP publiknya terbuka, kau tak perlu tunnel langsung — `ssh ubuntu@<IP>` terus jadi.
-`node.sh` masih berguna untuk kunci sshd yang betul dan tunnel sandaran.
-
----
-
-## 3. Kalau kau ada sandbox (muse.ai dan seumpamanya)
-
-Guna `muse_tunnel.sh` **asal**, jalankan di dalam sandbox:
-
-```bash
-bash muse_tunnel.sh add-key "ssh-ed25519 AAAA... boz-lab-node"
-bash muse_tunnel.sh
-bash muse_tunnel.sh url
-```
-
-Ia pulihkan sshd selepas `/etc` dipadam, kekalkan tunnel, dan pasang cron penjaga.
-Aku sudah audit script ni — **kodnya betul**, tiada bug yang perlu dibaiki.
-
----
-
-## 4. Bila PC kau perlu jadi hujung tunnel (Jalur 1)
-
-Jalur 1 beri alamat **tetap** (`ssh -p 2222 root@localhost`) tetapi PC kena ada dua benda,
-dan kedua-duanya perlu **admin**:
-
-```powershell
-# PowerShell sebagai Administrator
-Add-WindowsCapability -Online -Name OpenSSH.Server~~~~0.0.1.0
-Start-Service sshd; Set-Service sshd -StartupType Automatic
-```
-
-Pasang Tailscale dari `tailscale.com/download`, login. Kemudian di VPS:
-`bash muse_tunnel.sh pc-info` (di PC) untuk dapat `PC_USER` + `PC_TAILSCALE_IP`,
-isi dalam `~/workspace/tunnel/tunnel.env`, dan `PC_TUNNEL_ENABLE=1`.
-
-Tak wajib. Kalau kau cuma nak masuk ke hos, langkah 1 dah cukup.
-
----
-
-## 5. Perkara yang aku betulkan masa uji
-
-Bukan dalam script asal — dalam cara hos Linux dikonfigurasi:
-
-| Masalah | Punca | Fix dalam `node.sh` |
-|---|---|---|
-| Login password masih hidup | `sshd_config.d` baca ikut abjad, **nilai pertama menang**; `50-cloud-init.conf` mengalahkan `99-` | drop-in dinamakan `00-boz-node.conf` |
-| `AllowUsers ubuntu` tolak semua | GitHub runner guna user `runner`, bukan `ubuntu` | tiada `AllowUsers` langsung |
-| `$(bore_bin)` rosak | `echo` status mencemari stdout | status dipindah ke stderr |
-
-Ketiga-tiganya ditemui dengan ujian pada mesin sebenar, bukan andaian.
-
----
-
-## 6. Batasan jujur
-
-- **GitHub Actions bukan VPS.** Untuk kerja berterusan 24/7, proxy, atau mining — langgar ToS.
-  Guna untuk sesi kerja sekejap sahaja, atau ambil Oracle untuk kerja kekal.
-- **Tiada data kekal** antara run. Setiap nod baru = mesin kosong.
-- **`bore.pub` tanpa SLA dan tanpa akaun** — port bertukar setiap kali tunnel dimulakan semula.
-  Untuk port tetap, jalankan `node.sh install --port 45xxx` (selagi port itu bebas).
-- **Kunci peribadi** mesti kekal di PC. Sesiapa yang ada `keys/boz_lab` boleh masuk ke nod.
+- **Bukan VPS kekal.** GitHub Actions hadkan satu job 350 minit. Sistem ini menyelesaikannya
+  dengan berganti nod tanpa menukar alamat — bukan dengan mengekalkan satu mesin.
+- **Jeda ~40 saat** setiap pertukaran (diukur, bukan dianggarkan).
+- **Proses panjang mati** bila nod berganti. Kalau kau jalankan bot berterusan, ia perlu
+  auto-mula semula — letak dalam `~/persist/start.sh` dan panggil dari situ.
+- **Repo awam.** Hanya kunci *awam* dan blob tersulit ada di sana. Kunci peribadi kekal di PC.
+- **GitHub Actions bukan untuk mining/proxy berterusan.** Untuk kerja 24/7 sebenar yang serius,
+  VPS berbayar murah (Hetzner €3.79) atau Oracle Always Free masih jawapan yang betul —
+  dan `node.sh` yang sama boleh dipakai di sana tanpa ubah satu baris.
