@@ -1,6 +1,7 @@
 name: ephemeral-node
-# Nod Linux percuma atas permintaan: Ubuntu 24.04, sshd + tunnel awam port TETAP.
-# Semua logik ada dalam node.sh — fail yang SAMA boleh dipakai pada VPS sebenar.
+# Nod Linux percuma atas permintaan: Ubuntu 24.04 + sshd + tunnel awam port TETAP.
+# node.sh  = sediakan sshd + tunnel (fail sama boleh dipakai pada VPS sebenar)
+# state.sh = pulihkan & segerakkan ~/persist supaya kerja tak hilang bila nod berganti
 # Alamat SSH dilaporkan ke issue "node-status".
 
 on:
@@ -16,7 +17,7 @@ on:
         default: "45001"
 
 permissions:
-  contents: read
+  contents: write
   issues: write
 
 jobs:
@@ -36,6 +37,14 @@ jobs:
           sudo bash node.sh url | tee /tmp/url.txt
           [ -s /tmp/url.txt ] || { echo "::error::tiada alamat"; exit 1; }
 
+      - name: Pulihkan fail kerja
+        continue-on-error: true
+        env:
+          PERSIST_PASS: ${{ secrets.PERSIST_PASS }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO_SLUG: ${{ github.repository }}
+        run: bash state.sh restore
+
       - name: Lapor alamat ke issue
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -53,5 +62,12 @@ jobs:
           gh issue create --title "node-status" --body "$BODY" >/dev/null
           echo "dilaporkan: $URL (tamat $EXP)"
 
-      - name: Tahan hidup
-        run: sleep "$(( ${{ inputs.minutes }} * 60 ))"
+      - name: Tahan hidup + segerak fail
+        env:
+          PERSIST_PASS: ${{ secrets.PERSIST_PASS }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO_SLUG: ${{ github.repository }}
+        run: |
+          nohup bash state.sh watch > /tmp/state-watch.log 2>&1 &
+          echo "segerak fail: pid $!"
+          sleep "$(( ${{ inputs.minutes }} * 60 ))"
