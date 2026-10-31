@@ -190,17 +190,31 @@ start_tunnel() {
   stop_tunnel quiet
   local args=(local "$SSH_PORT_TARGET" --to "$PUBLIC_HOST")
   [ "$REQ_PORT" != "0" ] && args+=(--port "$REQ_PORT")
-  : > "$STATE_DIR/bore.log"
-  nohup "$b" "${args[@]}" >> "$STATE_DIR/bore.log" 2>&1 &
-  local p=$!
-  echo "$p" > "$STATE_DIR/bore.pid"
-  date +%s > "$STATE_DIR/started"
-  local i
-  for i in $(seq 1 20); do
-    sleep 2
-    grep -qiE 'listening at|remote_port' "$STATE_DIR/bore.log" && break
-    kill -0 "$p" 2>/dev/null || die "bore mati: $(tail -n 3 "$STATE_DIR/bore.log" | tr '\n' ' ')"
+
+  # Port tetap: kalau nod lama belum lepas port, cuba semula sampai 12 minit.
+  # Ini yang membolehkan alamat SSH kekal sama selepas pertukaran nod.
+  local attempt max=36
+  for attempt in $(seq 1 "$max"); do
+    : > "$STATE_DIR/bore.log"
+    nohup "$b" "${args[@]}" >> "$STATE_DIR/bore.log" 2>&1 &
+    local p=$!
+    echo "$p" > "$STATE_DIR/bore.pid"
+    date +%s > "$STATE_DIR/started"
+    local i ok=0
+    for i in $(seq 1 10); do
+      sleep 2
+      grep -qiE 'listening at|remote_port' "$STATE_DIR/bore.log" && { ok=1; break; }
+      kill -0 "$p" 2>/dev/null || break
+    done
+    [ "$ok" = "1" ] && break
+    kill "$p" 2>/dev/null || true
+    if [ "$REQ_PORT" = "0" ] || [ "$attempt" = "$max" ]; then
+      die "bore gagal: $(tail -n 2 "$STATE_DIR/bore.log" | tr '\n' ' ')"
+    fi
+    say "port $REQ_PORT belum bebas (cubaan $attempt/$max) — tunggu 20s" >&2
+    sleep 20
   done
+
   local addr
   addr="$(grep -oE 'listening at [^ ]+' "$STATE_DIR/bore.log" | tail -1 | awk '{print $3}')"
   [ -n "$addr" ] || die "bore tidak memberi alamat: $(tr '\n' ' ' < "$STATE_DIR/bore.log")"

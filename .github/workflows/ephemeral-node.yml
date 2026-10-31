@@ -1,5 +1,5 @@
 name: ephemeral-node
-# Hos Linux percuma atas permintaan: Ubuntu 24.04, sshd + tunnel awam.
+# Nod Linux percuma atas permintaan: Ubuntu 24.04, sshd + tunnel awam port TETAP.
 # Semua logik ada dalam node.sh — fail yang SAMA boleh dipakai pada VPS sebenar.
 # Alamat SSH dilaporkan ke issue "node-status".
 
@@ -9,7 +9,11 @@ on:
       minutes:
         description: "Umur nod dalam minit (maks 350)"
         required: true
-        default: "120"
+        default: "340"
+      port:
+        description: "Port tetap di bore.pub (kosong = rawak)"
+        required: false
+        default: "45001"
 
 permissions:
   contents: read
@@ -23,27 +27,31 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Sediakan nod
+        env:
+          NODE_PORT: ${{ inputs.port }}
         run: |
           set -eux
           bash -n node.sh
-          sudo bash node.sh install
-          sudo bash node.sh status
+          sudo bash node.sh install --port "$NODE_PORT"
           sudo bash node.sh url | tee /tmp/url.txt
           [ -s /tmp/url.txt ] || { echo "::error::tiada alamat"; exit 1; }
 
       - name: Lapor alamat ke issue
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MINUTES: ${{ inputs.minutes }}
         run: |
           set -eu
           URL=$(cat /tmp/url.txt)
-          END=$(date -u -d "+${{ inputs.minutes }} minutes" '+%F %T UTC')
-          BODY=$(printf 'Nod hidup. Tamat: %s\n\n```\n%s\n```\n\nRun: %s/%s/actions/runs/%s\n' \
-            "$END" "$URL" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")
+          PORT=$(printf '%s\n' "$URL" | sed -n 's/^ssh -p \([0-9]*\).*/\1/p')
+          EXP=$(( $(date -u +%s) + MINUTES * 60 ))
+          BODY=$(printf 'EXPIRES_UTC=%s\nPORT=%s\nTamat: %s UTC\n\n```\n%s\n```\n\nRun: %s/%s/actions/runs/%s\n' \
+            "$EXP" "$PORT" "$(date -u -d "@$EXP" '+%F %T')" "$URL" \
+            "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")
           NUM=$(gh issue list --search 'node-status in:title' --json number --jq '.[0].number' 2>/dev/null || true)
           if [ -n "${NUM:-}" ]; then gh issue close "$NUM" -c "diganti nod baru" >/dev/null 2>&1 || true; fi
           gh issue create --title "node-status" --body "$BODY" >/dev/null
-          echo "dilaporkan: $URL"
+          echo "dilaporkan: $URL (tamat $EXP)"
 
       - name: Tahan hidup
         run: sleep "$(( ${{ inputs.minutes }} * 60 ))"
