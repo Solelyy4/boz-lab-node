@@ -56,6 +56,23 @@ Kalau SSH tersangkut: tunggu 2 minit dan cuba lagi. Penjaga akan pulihkan sendir
 
 ---
 
+## Bot Telegram
+
+Nod boleh menjalankan bot yang hidup walaupun laptop kau tutup. Bot itu mati bersama mesin
+lama dan dihidupkan semula oleh `start.sh` pada mesin baharu — dalam ~1–2 minit.
+
+```bash
+bash set-bot.sh "1234567890:AAF..."
+```
+
+**Token mesti bot berasingan.** Telegram hanya benarkan **satu poller bagi setiap token**.
+Token TeleKey sudah dipoll di PC kau — guna token itu pada nod akan menyebabkan kedua-duanya
+berkelahi (`409 Conflict`) dan TeleKey kau terputus. Buat bot baharu di @BotFather (2 minit).
+
+Fail bot kau: `~/persist/bot.py` (contoh ada di kit) — tiada pakej luar, stdlib sahaja.
+
+---
+
 ## Isi kit
 
 | Fail | Fungsi |
