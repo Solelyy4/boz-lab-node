@@ -35,6 +35,16 @@ REQ_PORT="${REQ_PORT:-45001}"   # port yang DIMINTA daripada workflow (bukan sem
 
 now=$(date -u +%s)
 
+# Rantaian nod kini dijaga di awan (workflow `keeper` + `successor`). Penjaga PC
+# ini hanya jaring tambahan: jangan hantar pengganti kalau sudah ada nod hidup,
+# kerana dua nod = dua poller = 409 Telegram.
+nodes_running() {
+  local n
+  n=$("$GH" run list --repo "$REPO" --workflow "$WF" --limit 8 --json status \
+      --jq '[.[] | select(.status=="in_progress" or .status=="queued" or .status=="waiting")] | length' 2>/dev/null)
+  [ "${n:-0}" -gt 0 ]
+}
+
 # 0. Port benar-benar menjawab? Run boleh "in_progress" sedangkan tunnel mati.
 #    Dua kegagalan berturut (≈20 min) barulah diganti, supaya tidak berdenyut
 #    semasa nod baru sedang boot.
@@ -47,6 +57,11 @@ else
   echo "$n" > "$FAILF"
   log "port $PORT tidak menjawab (kegagalan ke-$n)"
   if [ "$n" -ge 2 ] || [ "${1:-}" = "--force" ]; then
+    if nodes_running && [ "${1:-}" != "--force" ]; then
+      log "nod lain sudah hidup — langkau pengganti (elak 409)"
+      rm -f "$FAILF"
+      exit 0
+    fi
     log "tunnel mati walaupun run hidup — hantar pengganti"
     date -u +%s > "$HOME/.boz-node/last_dispatch"
     "$GH" workflow run "$WF" --repo "$REPO" -f minutes="$MINUTES" -f port="$REQ_PORT" >/dev/null 2>&1 \
@@ -82,6 +97,10 @@ else
   log "tiada nod sah — hidupkan baru"
 fi
 
+if nodes_running; then
+  log "nod lain sudah hidup — langkau (elak dua poller / 409)"
+  exit 0
+fi
 "$GH" workflow run "$WF" --repo "$REPO" -f minutes="$MINUTES" -f port="$REQ_PORT" >/dev/null 2>&1 \
   && { date -u +%s > "$STAMP"; log "pengganti dihantar (port $PORT, $MINUTES min)"; } \
   || { log "GAGAL menghantar pengganti"; echo "keeper: GAGAL menghantar pengganti nod — semak $LOG"; }
