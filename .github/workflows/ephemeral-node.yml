@@ -91,7 +91,7 @@ jobs:
           # telekey.py/standby.sh ialah kod yang dihantar repo — sentiasa segar.
           # keys.db (data pengguna) TIDAK disentuh.
           mkdir -p "$P/telekey"
-          cp telekey/telekey.py telekey/config.json "$P/telekey"/
+          cp telekey/telekey.py telekey/config.json telekey/agent_groq.py "$P/telekey"/
           cp telekey/standby.sh "$P/telekey/standby.sh"; chmod +x "$P/telekey/standby.sh"
           mkdir -p "$P/skills"
           cp -r skills/. "$P/skills"/
