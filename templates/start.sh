@@ -39,6 +39,15 @@ if [ ! -x "$PWD/bin/hermes" ]; then
   mkdir -p "$PWD/bin"
   ln -sf "$PWD/hvenv/bin/hermes" "$PWD/bin/hermes"
 fi
+# --- 1c. 9router DI NOD: Mistral dari 32 akaun, hidup walaupun laptop BOZ mati --
+# Data (DB 9router + kunci Mistral) tinggal dalam ~/persist/nine, jadi ia
+# diwarisi setiap nod baru melalui blob simpanan yang tersulit.
+if [ -f "$PWD/nine/start-nine.sh" ]; then
+  bash "$PWD/nine/start-nine.sh" >> start.log 2>&1 \
+    && echo "9router sedia di :20128" >> start.log \
+    || echo "GAGAL menghidupkan 9router - bot akan guna provider awan" >> start.log
+fi
+# config agen dijana SELEPAS 9router hidup: kunci API-nya dibaca dari DB 9router.
 if [ -x "$PWD/hvenv/bin/python" ] && [ -f "$PWD/make-config.py" ]; then
   "$PWD/hvenv/bin/python" "$PWD/make-config.py" >> start.log 2>&1 \
     && echo "config.yaml agen dijana" >> start.log

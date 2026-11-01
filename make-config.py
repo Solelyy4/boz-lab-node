@@ -16,8 +16,41 @@ HOME = pathlib.Path(os.environ.get("HERMES_HOME") or (pathlib.Path.home() / "per
 CFG = HOME / "config.yaml"
 
 
+def nine_key() -> str:
+    """Kunci API 9router dari DB tempatan (dicipta oleh 9router sendiri)."""
+    db = HOME / "nine" / "db" / "data.sqlite"
+    if not db.exists():
+        return ""
+    try:
+        import sqlite3
+        con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+        row = con.execute("SELECT key FROM apiKeys WHERE isActive=1 LIMIT 1").fetchone()
+        con.close()
+        return (row[0] if row else "") or ""
+    except Exception:
+        return ""
+
+
 def build() -> dict:
     providers = {}
+
+    # 9router DI NOD: didahulukan kerana ia memberi 32 akaun Mistral dengan
+    # round-robin. Tanpanya bot hanya ada satu provider awan.
+    nk = nine_key()
+    if nk:
+        providers["9router"] = {
+            "base_url": "http://127.0.0.1:20128/v1",
+            "api_key": nk,
+            "api_mode": "chat_completions",
+            "model": "mistral/codestral-latest",
+            "request_timeout_seconds": 120,
+            "models": {
+                "mistral/codestral-latest": {},
+                "mistral/ministral-8b-latest": {},
+                "mistral/mistral-large-4": {},
+                "mistral-safe": {},
+            },
+        }
 
     tok = os.environ.get("TOKENOMIX_API_KEY", "").strip()
     if tok:
@@ -46,7 +79,8 @@ def build() -> dict:
     if not providers:
         return {}
 
-    primary = "tokenomix" if "tokenomix" in providers else next(iter(providers))
+    # 9router diutamakan bila wujud (Mistral dari 32 akaun), tokenomix jadi sandaran.
+    primary = "9router" if "9router" in providers else ("tokenomix" if "tokenomix" in providers else next(iter(providers)))
     return {
         "model": {"default": providers[primary]["model"], "provider": primary},
         # Bentuk PETA (bukan senarai) — hanya bentuk ini didaftarkan oleh

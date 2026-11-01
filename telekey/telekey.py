@@ -832,7 +832,9 @@ class Upstreams:
 
     def _call_one(self, up, payload):
         body = dict(payload)
-        body.pop("stream", None)
+        # WAJIB false, bukan dibuang: sesetengah 9router/upstream default ke SSE bila
+        # medan ini tiada, lalu badan jadi `data: {...}` dan parse JSON gagal.
+        body["stream"] = False
         if up.get("model"):
             body["model"] = up["model"]
         if not body.get("max_tokens"):

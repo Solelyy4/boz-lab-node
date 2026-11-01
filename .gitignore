@@ -2,3 +2,12 @@ keys/
 *.log
 alx/
 al.zip
+# Rahsia 9router TIDAK masuk repo: ia hidup dalam blob simpanan tersulit
+# (branch `state`) dan dipulihkan pada setiap boot nod.
+nine/db/
+nine/jwt-secret
+nine/machine-id
+nine/auth/
+nine/probe.py
+battery/
+*.pid
