@@ -95,6 +95,15 @@ jobs:
           cp telekey/standby.sh "$P/telekey/standby.sh"; chmod +x "$P/telekey/standby.sh"
           mkdir -p "$P/skills"
           cp -r skills/. "$P/skills"/
+          # Identiti penuh Hermes untuk bot: SOUL/AGENTS + semua SKILL.md.
+          # AGENTS.md juga diletak dalam folder kerja agen (cwd _agent_core).
+          if [ -d hermes-seed ]; then
+            cp -r hermes-seed/skills/. "$P/skills"/ 2>/dev/null || true
+            cp -f hermes-seed/SOUL.md "$P/SOUL.md" 2>/dev/null || true
+            cp -f hermes-seed/AGENTS.md "$P/AGENTS.md" 2>/dev/null || true
+            mkdir -p "$P/telekey"
+            cp -f hermes-seed/AGENTS.md "$P/telekey/AGENTS.md" 2>/dev/null || true
+          fi
           echo "bootstrap: $(find "$P/skills" -name SKILL.md 2>/dev/null | wc -l) skill, start.sh=$([ -x "$P/start.sh" ] && echo ada)"
 
       # Selepas fail pulih barulah proses dijalankan — bot perlukan failnya dahulu.

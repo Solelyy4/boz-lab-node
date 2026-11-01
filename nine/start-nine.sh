@@ -51,7 +51,18 @@ case "${1:-start}" in
     exit 0 ;;
 esac
 
-if alive && listening; then echo "sudah jalan pid $(cat "$PIDF")"; sync_key; exit 0; fi
+if alive && listening; then
+  echo "sudah jalan pid $(cat "$PIDF")"
+  sync_key
+  # Pastikan shim juga hidup (nod warisan mungkin belum ada shim)
+  if [ -f "$DATA/router-shim.py" ] && ! { [ -f "$DATA/shim.pid" ] && kill -0 "$(cat "$DATA/shim.pid")" 2>/dev/null; }; then
+    nohup python3 "$DATA/router-shim.py" --port 20129 --upstream "http://127.0.0.1:$PORT" \
+      >> "$HOME_DIR/persist/shim.log" 2>&1 &
+    echo $! > "$DATA/shim.pid"
+    sleep 2
+  fi
+  exit 0
+fi
 
 # 1. Pasang jika belum ada (mesin baru = kosong; venv/node_modules tidak disimpan)
 if [ ! -x "$BIN" ]; then
@@ -100,6 +111,20 @@ PY
     grep -q '^HERMES_CUSTOM_9ROUTER_API_KEY=' "$ENVF" \
       || printf 'HERMES_CUSTOM_9ROUTER_API_KEY=%s\n' "$KEY" >> "$ENVF"
     chmod 600 "$ENVF"
+  fi
+
+  # Shim SSE: Hermes minta stream, 9router hantar tool-call separuh. Shim
+  # menukar jawapan penuh kepada SSE yang sah supaya alat benar-benar jalan.
+  SHIMPID="$DATA/shim.pid"
+  if ! { [ -f "$SHIMPID" ] && kill -0 "$(cat "$SHIMPID")" 2>/dev/null; }; then
+    if [ -f "$DATA/router-shim.py" ]; then
+      nohup python3 "$DATA/router-shim.py" --port 20129 --upstream "http://127.0.0.1:$PORT" \
+        >> "$HOME_DIR/persist/shim.log" 2>&1 &
+      echo $! > "$SHIMPID"
+      sleep 2
+      curl -sS -m 5 "http://127.0.0.1:20129/health" >/dev/null 2>&1 \
+        && echo "shim SSE sedia di :20129" || echo "AMARAN: shim tidak menjawab"
+    fi
   fi
   echo "9router hidup pid $(cat "$PIDF") pada $PORT"
   exit 0

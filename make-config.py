@@ -39,7 +39,10 @@ def build() -> dict:
     nk = nine_key()
     if nk:
         providers["9router"] = {
-            "base_url": "http://127.0.0.1:20128/v1",
+            # Melalui shim SSE: 9router hantar tool-call separuh apabila
+            # streaming, dan Hermes melaporkan "stream stalled" lalu tidak
+            # menjalankan alat. Shim menukar jawapan penuh kepada SSE sah.
+            "base_url": "http://127.0.0.1:20129/v1",
             "api_key": nk,
             "api_mode": "chat_completions",
             "model": "mistral/codestral-latest",
@@ -108,6 +111,21 @@ def main() -> int:
 
     CFG.write_text(yaml.safe_dump(cfg, sort_keys=False), encoding="utf-8")
     CFG.chmod(0o600)
+
+    # Profil `lite` untuk model kecil: tanpa auto_load. Tanpa profil ini, 8B
+    # tercemar oleh teks skill (pernah menulis "128" yang disalin dari contoh).
+    lite = HOME / "profiles" / "lite"
+    lite.mkdir(parents=True, exist_ok=True)
+    lite_cfg = {
+        "model": {"default": cfg["model"]["default"], "provider": cfg["model"]["provider"]},
+        # Blok providers WAJIB ada di sini juga: tanpanya profil lite gagal
+        # dengan "Unknown provider '9router'" dan model 8B mati sepenuhnya.
+        "providers": cfg["providers"],
+        "skills": {"external_dirs": [str(HOME / "skills")]},
+        "terminal": {"backend": "local", "timeout": 180},
+    }
+    (lite / "config.yaml").write_text(yaml.safe_dump(lite_cfg, sort_keys=False), encoding="utf-8")
+
     skills = HOME / "skills"
     n = len(list(skills.rglob("SKILL.md"))) if skills.is_dir() else 0
     print(f"config ditulis: {CFG} ({CFG.stat().st_size} bait), provider={list(cfg['providers'])}, skills={n}")
