@@ -66,6 +66,7 @@ jobs:
             printf 'TOKENOMIX_API_KEY=%s\n'  "$TOKENOMIX_API_KEY"
             printf 'HERMES_HOME=%s\n'        "$HOME/persist"
             printf 'TELEKEY_PORT=8766\n'
+            printf 'GITHUB_RUN_ID=%s\n'      "$GITHUB_RUN_ID"
           } > "$HOME/persist/.env"
           chmod 600 "$HOME/persist/.env"
           printf '%s' "$TOKENHARBOR_KEY" > "$HOME/persist/secrets/tokenharbor.key"
@@ -116,8 +117,8 @@ jobs:
           URL=$(cat /tmp/url.txt)
           PORT=$(printf '%s\n' "$URL" | sed -n 's/^ssh -p \([0-9]*\).*/\1/p')
           EXP=$(( $(date -u +%s) + MINUTES * 60 ))
-          BODY=$(printf 'EXPIRES_UTC=%s\nPORT=%s\nTamat: %s UTC\n\n```\n%s\n```\n\nRun: %s/%s/actions/runs/%s\n' \
-            "$EXP" "$PORT" "$(date -u -d "@$EXP" '+%F %T')" "$URL" \
+          BODY=$(printf 'EXPIRES_UTC=%s\nPORT=%s\nOWNER=%s\nTamat: %s UTC\n\n```\n%s\n```\n\nRun: %s/%s/actions/runs/%s\n' \
+            "$EXP" "$PORT" "$GITHUB_RUN_ID" "$(date -u -d "@$EXP" '+%F %T')" "$URL" \
             "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")
           NUM=$(gh issue list --search 'node-status in:title' --json number --jq '.[0].number' 2>/dev/null || true)
           if [ -n "${NUM:-}" ]; then gh issue close "$NUM" -c "diganti nod baru" >/dev/null 2>&1 || true; fi

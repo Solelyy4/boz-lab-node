@@ -38,6 +38,29 @@ hb_age() {
 
 running() { [ -f "$PIDF" ] && kill -0 "$(cat "$PIDF")" 2>/dev/null; }
 
+# --- Pemilikan nod -----------------------------------------------------------
+# Boleh ada lebih satu nod hidup serentak (pengganti bermula sebelum yang lama
+# tamat). Telegram hanya benarkan SATU poller; kalau dua ambil alih, kedua-dua
+# dapat 409. Nod terbaharu menulis OWNER=<run_id> ke issue node-status, jadi
+# hanya pemilik dibenarkan poll. Fail-open bila issue tak terjangkau: lebih baik
+# cuba (mungkin 409) daripada bot senyap sepenuhnya.
+OWNER_URL="https://api.github.com/repos/Solelyy4/boz-lab-node/issues?state=open&per_page=10"
+_owner_cache_ts=0
+_owner_cache=""
+am_owner() {
+  local now run
+  now=$(date -u +%s)
+  run="${GITHUB_RUN_ID:-}"
+  [ -z "$run" ] && return 0          # bukan dalam Actions: anggap pemilik
+  if [ $(( now - _owner_cache_ts )) -gt 300 ]; then
+    _owner_cache=$(curl -sS -m 10 -H "Accept: application/vnd.github+json" "$OWNER_URL" 2>/dev/null \
+      | tr ',' '\n' | grep -o 'OWNER=[0-9]*' | tail -1 | cut -d= -f2)
+    _owner_cache_ts=$now
+  fi
+  [ -z "$_owner_cache" ] && return 0  # tiada maklumat: fail-open
+  [ "$_owner_cache" = "$run" ]
+}
+
 say "penunggu bermula (fresh=${FRESH}s, semak tiap ${CHECK}s)"
 while :; do
   age="$(hb_age)"
@@ -50,9 +73,19 @@ while :; do
     fi
   else
     if ! running; then
-      nohup $BOT_CMD >> "$HERE/telekey.log" 2>&1 &
-      echo $! > "$PIDF"
-      say "PC senyap (nadi ${age}s) — bot DIAMBIL ALIH, pid $!"
+      if am_owner; then
+        nohup $BOT_CMD >> "$HERE/telekey.log" 2>&1 &
+        echo $! > "$PIDF"
+        say "PC senyap (nadi ${age}s) — bot DIAMBIL ALIH, pid $!"
+      else
+        say "PC senyap (nadi ${age}s) tetapi nod lain (OWNER=${_owner_cache:-?}) pemilik — berdiam"
+      fi
+    elif ! am_owner; then
+      # Nod lebih baru sudah mengambil alih: lepaskan poll supaya tiada 409.
+      kill "$(cat "$PIDF")" 2>/dev/null
+      sleep 1
+      rm -f "$PIDF"
+      say "nod lain jadi pemilik — bot dilepas"
     fi
   fi
   sleep "$CHECK"
