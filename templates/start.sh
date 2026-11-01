@@ -11,6 +11,9 @@
 # =============================================================================
 set -u
 cd "$(dirname "$0")" || exit 1
+# Kunci provider datang dari .env (ditulis workflow dari Actions secrets).
+# Tanpanya make-config.py tidak dapat menjana config.yaml untuk agen.
+[ -f ./.env ] && { set -a; . ./.env; set +a; }
 STAMP=$(date -u '+%F %T')
 echo "=== $STAMP pada $(hostname) ===" >> start.log
 echo "start.sh jalan pada $STAMP di $(hostname)" > start-result.txt
