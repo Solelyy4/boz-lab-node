@@ -55,21 +55,6 @@ def build() -> dict:
             },
         }
 
-    tok = os.environ.get("TOKENOMIX_API_KEY", "").strip()
-    if tok:
-        providers["tokenomix"] = {
-            "base_url": "https://api.tokenomixai.com/v1",
-            "api_key": tok,
-            "model": "deepseek-v4.1-flash",
-            "api_mode": "chat_completions",
-            "models": {
-                "deepseek-v4.1-flash": {},
-                "deepseek-v4-flash": {},
-                "glm-5.2": {},
-                "deepseek-v4.1-flash-1017": {},
-            },
-        }
-
     groq = os.environ.get("GROQ_API_KEY", "").strip()
     if groq:
         providers["groq"] = {
@@ -79,13 +64,34 @@ def build() -> dict:
             "models": {"qwen/qwen3.8-27b": {}},
         }
 
+    # Tokenomix = laluan premium (DeepSeek). Bila kredit habis, rantai jatuh ke
+    # 9router Mistral (32 akaun) — itulah sandaran yang diminta BOZ.
+    tmx = os.environ.get("TOKENOMIX_API_KEY", "").strip()
+    if tmx:
+        providers["tokenomix"] = {
+            "base_url": "https://api.tokenomixai.com/v1",
+            "api_key": tmx,
+            "model": "deepseek-v4-pro-0813",
+            "api_mode": "chat_completions",
+            "models": {"deepseek-v4-pro-0813": {}, "deepseek-v4-mod": {},
+                       "deepseek-v4.1-flash": {}, "deepseek-v4-flash": {}},
+            "request_timeout_seconds": 120,
+        }
+
     if not providers:
         return {}
 
-    # 9router diutamakan bila wujud (Mistral dari 32 akaun), tokenomix jadi sandaran.
-    primary = "9router" if "9router" in providers else ("tokenomix" if "tokenomix" in providers else next(iter(providers)))
+    # Premium dahulu bila wujud; 9router Mistral sandaran.
+    primary = "9router" if "9router" in providers else (
+        "tokenomix" if "tokenomix" in providers else next(iter(providers)))
     return {
         "model": {"default": providers[primary]["model"], "provider": primary},
+        # Rantai sandaran: kekal dalam keluarga Mistral dahulu, groq terakhir.
+        "fallback_model": ([{"provider": "9router", "model": "mistral/ministral-8b-latest"},
+                            {"provider": "9router", "model": "mistral/mistral-large-4"}]
+                           if "9router" in providers else []) +
+                          ([{"provider": "groq", "model": "qwen/qwen3.8-27b"}]
+                           if "groq" in providers else []),
         # Bentuk PETA (bukan senarai) — hanya bentuk ini didaftarkan oleh
         # hermes 0.19; senarai menghasilkan "Unknown provider".
         "providers": providers,

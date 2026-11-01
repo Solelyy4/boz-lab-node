@@ -1,89 +1,83 @@
 {
-  "daily_cap": 20000,
-  "daily_token_cap": 5000000,
-  "chat_daily_cap": 2000,
-  "agent_daily_cap": 200,
+  "daily_cap": 4000,
+  "daily_token_cap": 30000000,
+  "chat_daily_cap": 3000,
+  "agent_daily_cap": 800,
   "agent_timeout_s": 600,
   "agent_tiers": {
     "hard": {
-      "model": "mistral/codestral-latest",
-      "provider": "9router",
+      "model": "deepseek-v4-pro-0813",
+      "provider": "tokenomix",
       "timeout": 700
     },
     "medium": {
-      "model": "mistral/ministral-8b-latest",
-      "provider": "9router",
+      "model": "deepseek-v4-pro-0813",
+      "provider": "tokenomix",
       "timeout": 420
     },
     "easy": {
-      "model": "mistral/ministral-8b-latest",
-      "provider": "9router",
+      "model": "openai/gpt-oss-120b",
+      "provider": "groq",
       "timeout": 360
     },
     "max": {
-      "model": "mistral/mistral-large-4",
-      "provider": "9router",
+      "model": "deepseek-v4-pro",
+      "provider": "tokenomix",
       "timeout": 900
     }
   },
   "upstream": [
     {
-      "name": "9r-codestral",
-      "base_url": "http://127.0.0.1:20128/v1",
-      "model": "mistral/codestral-latest",
-      "api_key_env": "HERMES_CUSTOM_9ROUTER_API_KEY",
-      "timeout": 60,
+      "name": "groq-120b",
+      "base_url": "https://api.groq.com/openai/v1",
+      "model": "openai/gpt-oss-120b",
       "tier": "chat",
-      "speed": 1
+      "speed": 1,
+      "max_tokens": 1100,
+      "timeout": 90,
+      "api_key_env": "GROQ_API_KEY"
     },
     {
-      "name": "9r-ministral",
-      "base_url": "http://127.0.0.1:20128/v1",
-      "model": "mistral/ministral-8b-latest",
-      "api_key_env": "HERMES_CUSTOM_9ROUTER_API_KEY",
-      "timeout": 60,
-      "tier": "chat",
-      "speed": 2
-    },
-    {
-      "name": "groq-fast",
+      "name": "groq-qwen",
       "base_url": "https://api.groq.com/openai/v1",
       "model": "qwen/qwen3.8-27b",
-      "api_key_env": "GROQ_API_KEY",
-      "timeout": 30,
       "tier": "chat",
-      "speed": 3
-    },
-    {
-      "name": "openrouter-free",
-      "base_url": "https://openrouter.ai/api/v1",
-      "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
-      "api_key_env": "OPENROUTER_API_KEY_MANUAL",
+      "speed": 2,
+      "max_tokens": 1100,
       "timeout": 90,
-      "tier": "chat",
-      "speed": 4
+      "api_key_env": "GROQ_API_KEY"
     },
     {
-      "name": "9r-large4",
-      "base_url": "http://127.0.0.1:20128/v1",
-      "model": "mistral/mistral-large-4",
-      "api_key_env": "HERMES_CUSTOM_9ROUTER_API_KEY",
-      "timeout": 120,
+      "name": "groq-20b",
+      "base_url": "https://api.groq.com/openai/v1",
+      "model": "openai/gpt-oss-20b",
       "tier": "chat",
-      "speed": 9,
-      "enabled": false,
-      "note": "model reasoning: content hanya blok thinking melalui gateway — dipakai sebagai otak agen (hard), bukan chat"
-    },
-    {
-      "name": "tokenharbor",
-      "base_url": "https://tokenharbor.ai/v1",
-      "model": "mimo-v2.5:free",
-      "api_key_file": "$HERMES_HOME/secrets/tokenharbor.key",
+      "speed": 3,
+      "max_tokens": 1100,
       "timeout": 90,
+      "api_key_env": "GROQ_API_KEY"
+    },
+    {
+      "name": "groq-safeguard",
+      "base_url": "https://api.groq.com/openai/v1",
+      "model": "openai/gpt-oss-safeguard-20b",
       "tier": "chat",
-      "speed": 9,
-      "enabled": false,
-      "note": "free allowance habis sampai 5 Nov 2026 11:50 UTC; saldo berbayar $0"
+      "speed": 4,
+      "max_tokens": 700,
+      "timeout": 90,
+      "api_key_env": "GROQ_API_KEY"
+    },
+    {
+      "name": "tmx-pro",
+      "base_url": "https://api.tokenomixai.com/v1",
+      "model": "deepseek-v4-pro-0813",
+      "api_key_env": "TOKENOMIX_API_KEY",
+      "timeout": 180,
+      "tier": "chat",
+      "speed": 5,
+      "enabled": true,
+      "max_tokens": 2200
     }
-  ]
+  ],
+  "rem_gist": "https://gist.githubusercontent.com/Solelyy4/d5cdf07feb91d5d89337476d2f9db7ae/raw/rem.json"
 }

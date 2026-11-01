@@ -77,6 +77,21 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path.rstrip("/") in ("/health", "/v1/health"):
             return self._send(200, b'{"ok":true,"shim":"router-shim"}', "application/json")
+        # Laluan baca (models, dsb.) disalurkan terus — tanpa ini /models keluar 404
+        # dan bot/klien menyangka provider tiada model.
+        if self.path.startswith("/v1/"):
+            try:
+                rq = urllib.request.Request(
+                    UPSTREAM.rstrip("/") + self.path,
+                    headers={"Authorization": self.headers.get("Authorization", "")})
+                with urllib.request.urlopen(rq, timeout=60) as rs:
+                    return self._send(200, rs.read(), "application/json")
+            except urllib.error.HTTPError as exc:
+                return self._send(exc.code, exc.read() or b"{}", "application/json")
+            except Exception as exc:
+                return self._send(502, json.dumps(
+                    {"error": {"message": "shim:%s" % type(exc).__name__}}).encode(),
+                    "application/json")
         return self._send(404, b'{"error":{"message":"tiada"}}', "application/json")
 
     def do_POST(self):
@@ -100,25 +115,94 @@ class Handler(BaseHTTPRequestHandler):
             pass
 
         wants_stream = bool(payload.get("stream"))
-        payload["stream"] = False
-        req = urllib.request.Request(
-            UPSTREAM.rstrip("/") + "/v1/chat/completions",
-            data=json.dumps(payload).encode(),
-            headers={"Authorization": self.headers.get("Authorization", ""),
-                     "Content-Type": "application/json"})
-        try:
-            with urllib.request.urlopen(req, timeout=600) as resp:
-                raw = resp.read()
-        except urllib.error.HTTPError as exc:
-            return self._send(exc.code, exc.read() or b"{}", "application/json")
-        except Exception as exc:
-            return self._send(502, json.dumps({"error": {"message": f"shim:{type(exc).__name__}"}}).encode(),
-                              "application/json")
 
-        try:
-            obj = json.loads(raw)
-        except json.JSONDecodeError:
-            return self._send(502, b'{"error":{"message":"hulu bukan JSON"}}', "application/json")
+        # Chat biasa (tiada alat): alirkan SSE 9router terus kepada klien, baris
+        # demi baris — inilah yang menjadikan jawapan "menaip" di Telegram.
+        # Bila ada alat, tool_calls 9router tidak lengkap, jadi kita paksa
+        # non-stream dan bungkus semula (lihat di bawah).
+        if wants_stream and not (payload.get("tools") or []):
+            payload["stream"] = True
+            try:
+                resp = urllib.request.urlopen(urllib.request.Request(
+                    UPSTREAM.rstrip("/") + "/v1/chat/completions",
+                    data=json.dumps(payload).encode(),
+                    headers={"Authorization": self.headers.get("Authorization", ""),
+                             "Content-Type": "application/json"}), timeout=600)
+            except urllib.error.HTTPError as exc:
+                return self._send(exc.code, exc.read() or b"{}", "application/json")
+            except Exception:
+                return self._send(502, b'{"error":{"message":"shim: aliran gagal"}}',
+                                  "application/json")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Transfer-Encoding", "chunked")
+            self.end_headers()
+            try:
+                for raw_line in resp:
+                    if not raw_line:
+                        continue
+                    self.wfile.write(b"%x\r\n" % len(raw_line) + raw_line + b"\r\n")
+                    self.wfile.flush()
+            except (BrokenPipeError, ConnectionResetError):
+                pass
+            finally:
+                try:
+                    self.wfile.write(b"0\r\n\r\n")
+                    self.wfile.flush()
+                except Exception:
+                    pass
+                resp.close()
+            return
+
+        payload["stream"] = False
+        # Bila ada alat: pastikan had token cukup untuk argumen JSON yang panjang
+        # (sebelum ini argumen terpotong separuh dan alat gagal), dan benarkan
+        # model memilih alat sendiri.
+        if payload.get("tools"):
+            payload.setdefault("tool_choice", "auto")
+            try:
+                if int(payload.get("max_tokens") or 0) < 1024:
+                    payload["max_tokens"] = 2048
+            except (TypeError, ValueError):
+                payload["max_tokens"] = 2048
+
+        def _hantar(pl):
+            rq = urllib.request.Request(
+                UPSTREAM.rstrip("/") + "/v1/chat/completions",
+                data=json.dumps(pl).encode(),
+                headers={"Authorization": self.headers.get("Authorization", ""),
+                         "Content-Type": "application/json"})
+            with urllib.request.urlopen(rq, timeout=600) as rs:
+                return rs.read()
+
+        def _kosong(o):
+            msg = ((o.get("choices") or [{}])[0].get("message") or {})
+            txt = msg.get("content") or ""
+            if isinstance(txt, list):
+                txt = "".join(b.get("text", "") for b in txt if isinstance(b, dict))
+            return not (txt or "").strip() and not (msg.get("tool_calls") or [])
+
+        attempts = 2 if payload.get("tools") else 1
+        raw, obj = b"", None
+        for cubaan in range(attempts):
+            try:
+                raw = _hantar(payload)
+            except urllib.error.HTTPError as exc:
+                return self._send(exc.code, exc.read() or b"{}", "application/json")
+            except Exception as exc:
+                return self._send(502, json.dumps({"error": {"message": f"shim:{type(exc).__name__}"}}).encode(),
+                                  "application/json")
+            try:
+                obj = json.loads(raw)
+            except json.JSONDecodeError:
+                return self._send(502, b'{"error":{"message":"hulu bukan JSON"}}', "application/json")
+            if not _kosong(obj):
+                break
+            # Jawapan kosong = model tersekat; ulang sekali dengan suhu 0.
+            payload["temperature"] = 0
+
+        obj = obj or {}
 
         # Peristiwa langkah: bot tail fail ini untuk tunjuk "sedang buat kerja".
         # Nama alat diambil dari jawapan sebenar, bukan tekaan.
