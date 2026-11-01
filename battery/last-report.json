@@ -4,8 +4,8 @@
   "tasks": {
    "sederhana": {
     "lulus": true,
-    "saat": 21.5,
-    "jawapan": "## ✅ [TULISAN] Fail medium_ministral.txt siap  **Isi fail:** ``` BARIS-ministral ```  **Bukti:** Fail ditulis dan dibaca semula dengan kandungan tepat seperti y",
+    "saat": 27.8,
+    "jawapan": "## ✅ **Tugas Selesai**  Fail `C:/Users/zahin/Downloads/tunnel-kit/battery/medium_ministral.txt` telah ditulis dan dibaca semula dengan kandungan tepat:  ``` BAR",
     "ralat": null
    }
   }

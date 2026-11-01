@@ -99,17 +99,25 @@ mengubah kod. Provider disediakan `make-config.py` daripada `.env`.
 DB nod ke DB PC secara idempotent (`MAX`, bukan tambah, kerana gerbang menjamin hanya satu bot
 aktif pada satu masa).
 
-### 9Router Mistral di Hermes — status diukur
+### 9Router Mistral di Hermes — status diukur (bateri 3 saiz tugasan)
 
-| Model | Chat sesi baru | Alat + skill | Sesi lama (`--resume`) |
-|---|---|---|---|
-| `mistral/codestral-latest` | lulus 6s | lulus 13s | lulus (ingat konteks, 5s) |
-| `mistral/ministral-8b-latest` | lulus 10s | lulus 8s (arahan jelas) | belum diuji |
-| `mistral/mistral-large-4` | lulus | lulus 24s | belum diuji |
-| `mistral/mistral-large-latest` | **gagal 403** `tier_not_allowed` | — | — |
+| Model | Chat (soalan/kerja) | Tugasan agen | Sesi lama | Nota |
+|---|---|---|---|---|
+| `mistral/codestral-latest` | lulus | **3/3 lulus** | lulus (ingat konteks) | paling seimbang |
+| `mistral/mistral-large-4` | lulus | **3/3 lulus** | belum | paling teliti |
+| `mistral/ministral-8b-latest` | lulus | **3/3 lulus bila diulang**, 2/3 dalam larian berturut | belum | kadang tukar aksara literal (`-` → `=`) |
+| `mistral/mistral-large-latest` | **dibuang** | — | — | 403 `tier_not_allowed` pada semua 32 akaun |
 
-`mistral-large-latest` ditolak oleh langganan Mistral kau sendiri, bukan oleh Hermes. Guna
-`mistral-large-4` untuk kerja berat.
+Bateri mengesahkan kerja dari **kesan fizikal di disk** (fail benar-benar ditulis dan dibaca
+semula), bukan dari kata-kata model. Tiada model yang menjawab dengan "ini langkah-langkahnya".
+Tugasan yang diuji: kiraan (senang), tulis+baca fail dengan kandungan tepat (sederhana), kira
+bilangan fail melalui alat lalu tulis hasil (berat).
+
+Dua peraturan keras dimasukkan ke prompt setiap panggilan agen dan ke `AGENTS.md`:
+
+1. **Kiraan wajib guna alat.** Sebelum ini codestral menjawab `4273` dan ministral `4223` untuk
+   47×89 (dua-dua salah). Selepas peraturan: `4183`, dikira dengan `python3`.
+2. **Salin literal aksara demi aksara**, kemudian baca semula dan bandingkan.
 
 **Peraturan sesi:** model dikunci semasa sesi dicipta. `--resume` dengan `-m` berbeza akan
 ditolak secara reka bentuk; tukar model dari dalam sesi dengan `/model`.
