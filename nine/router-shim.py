@@ -86,6 +86,19 @@ class Handler(BaseHTTPRequestHandler):
         except json.JSONDecodeError:
             return self._send(400, b'{"error":{"message":"JSON tidak sah"}}', "application/json")
 
+        # Jejak ringkas: berapa alat Hermes hantar dan sama ada ia minta stream.
+        # Tanpa ini, mustahil untuk tahu sama ada masalah di Hermes atau di router.
+        try:
+            import os as _os
+            _p = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "shim-req.log")
+            with open(_p, "a", encoding="utf-8") as fh:
+                fh.write(json.dumps({"model": payload.get("model"),
+                                     "tools": len(payload.get("tools") or []),
+                                     "stream": bool(payload.get("stream")),
+                                     "msgs": len(payload.get("messages") or [])}) + "\n")
+        except OSError:
+            pass
+
         wants_stream = bool(payload.get("stream"))
         payload["stream"] = False
         req = urllib.request.Request(

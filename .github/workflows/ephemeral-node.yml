@@ -99,6 +99,9 @@ jobs:
           # AGENTS.md juga diletak dalam folder kerja agen (cwd _agent_core).
           if [ -d hermes-seed ]; then
             cp -r hermes-seed/skills/. "$P/skills"/ 2>/dev/null || true
+            # Lima skill (cash-engine, offer-factory, ...) tinggal di bawah
+            # shared/elyy/skills — tanpa baris ini nod kurang 5 skill.
+            [ -d hermes-seed/shared/elyy/skills ] && cp -r hermes-seed/shared/elyy/skills/. "$P/skills"/ 2>/dev/null || true
             cp -f hermes-seed/SOUL.md "$P/SOUL.md" 2>/dev/null || true
             cp -f hermes-seed/AGENTS.md "$P/AGENTS.md" 2>/dev/null || true
             mkdir -p "$P/telekey"
