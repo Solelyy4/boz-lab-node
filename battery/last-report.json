@@ -1,0 +1,13 @@
+{
+ "ministral": {
+  "model": "mistral/ministral-8b-latest",
+  "tasks": {
+   "senang": {
+    "lulus": true,
+    "saat": 12.1,
+    "jawapan": "4183",
+    "ralat": null
+   }
+  }
+ }
+}

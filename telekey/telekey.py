@@ -108,6 +108,9 @@ BM_AGENT_PREFIX = ("Jawab dalam Bahasa Malaysia yang padat. Kamu ada tools penuh
                    "`python -m pip` tiada, jalankan `python -m ensurepip` dahulu. JANGAN beri "
                    "cadangan tanpa melaksanakan — buat kerja itu terus dengan tools; cadangan "
                    "hanya dibenarkan bila benar-benar mustahil (sebut sebab teknikal satu baris). "
+                   "KIRAAN WAJIB GUNA ALAT: sebarang aritmetik — walaupun 2+2 atau 'balas nombor "
+                   "sahaja' — mesti dikira dengan terminal/python, bukan dalam kepala; jawapan angka "
+                   "tanpa bukti alat dikira SALAH. "
                    "Tugasan: ")
 UPGRADE_PLAYBOOK = (
     " [PLAYBOOK UPGRADE BOT] Muat skill `telekey-bot-ops` dahulu (skill_view) untuk peta penuh. "
