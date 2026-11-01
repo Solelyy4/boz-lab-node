@@ -19,6 +19,28 @@ export PATH="$HOME_DIR/persist/npm/bin:$PATH"
 alive() { [ -f "$PIDF" ] && kill -0 "$(cat "$PIDF")" 2>/dev/null; }
 listening() { (ss -ltn 2>/dev/null || netstat -ltn 2>/dev/null) | grep -q "[:.]$PORT "; }
 
+# Kunci API 9router mesti ada dalam .env supaya upstream bot (yang membaca
+# HERMES_CUSTOM_9ROUTER_API_KEY) boleh memanggil 9router di nod ini.
+# Dijalankan walau 9router sudah hidup — kalau tidak, nod warisan tiada kunci.
+sync_key() {
+  local envf="$HOME_DIR/persist/.env" key
+  [ -f "$envf" ] || return 0
+  key=$(python3 - "$DATA/db/data.sqlite" <<'PY'
+import sqlite3, sys
+try:
+    c = sqlite3.connect(f"file:{sys.argv[1]}?mode=ro", uri=True)
+    row = c.execute("SELECT key FROM apiKeys WHERE isActive=1 LIMIT 1").fetchone()
+    print(row[0] if row else "")
+except Exception:
+    print("")
+PY
+)
+  [ -n "$key" ] || return 0
+  grep -q '^HERMES_CUSTOM_9ROUTER_API_KEY=' "$envf" \
+    || printf 'HERMES_CUSTOM_9ROUTER_API_KEY=%s\n' "$key" >> "$envf"
+  chmod 600 "$envf"
+}
+
 case "${1:-start}" in
   stop)
     if alive; then kill "$(cat "$PIDF")" 2>/dev/null; sleep 2; fi
@@ -29,7 +51,7 @@ case "${1:-start}" in
     exit 0 ;;
 esac
 
-if alive && listening; then echo "sudah jalan pid $(cat "$PIDF")"; exit 0; fi
+if alive && listening; then echo "sudah jalan pid $(cat "$PIDF")"; sync_key; exit 0; fi
 
 # 1. Pasang jika belum ada (mesin baru = kosong; venv/node_modules tidak disimpan)
 if [ ! -x "$BIN" ]; then
@@ -56,7 +78,30 @@ nohup "$BIN" --port "$PORT" --no-browser --skip-update >> "$LOG" 2>&1 &
 echo $! > "$PIDF"
 for _ in $(seq 1 20); do
   sleep 1
-  listening && { echo "9router hidup pid $(cat "$PIDF") pada $PORT"; exit 0; }
+  listening && break
   alive || break
 done
+
+if listening; then
+  # Kunci API 9router mesti masuk .env supaya upstream bot (yang membaca
+  # HERMES_CUSTOM_9ROUTER_API_KEY) boleh memanggil 9router di nod ini.
+  ENVF="$HOME_DIR/persist/.env"
+  KEY=$(python3 - "$DATA/db/data.sqlite" <<'PY'
+import sqlite3, sys
+try:
+    c = sqlite3.connect(f"file:{sys.argv[1]}?mode=ro", uri=True)
+    row = c.execute("SELECT key FROM apiKeys WHERE isActive=1 LIMIT 1").fetchone()
+    print(row[0] if row else "")
+except Exception:
+    print("")
+PY
+)
+  if [ -n "$KEY" ] && [ -f "$ENVF" ]; then
+    grep -q '^HERMES_CUSTOM_9ROUTER_API_KEY=' "$ENVF" \
+      || printf 'HERMES_CUSTOM_9ROUTER_API_KEY=%s\n' "$KEY" >> "$ENVF"
+    chmod 600 "$ENVF"
+  fi
+  echo "9router hidup pid $(cat "$PIDF") pada $PORT"
+  exit 0
+fi
 echo "GAGAL menghidupkan 9router — log:"; tail -6 "$LOG"; exit 1
