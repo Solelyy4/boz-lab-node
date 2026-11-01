@@ -120,6 +120,24 @@ class Handler(BaseHTTPRequestHandler):
         except json.JSONDecodeError:
             return self._send(502, b'{"error":{"message":"hulu bukan JSON"}}', "application/json")
 
+        # Peristiwa langkah: bot tail fail ini untuk tunjuk "sedang buat kerja".
+        # Nama alat diambil dari jawapan sebenar, bukan tekaan.
+        try:
+            import os as _os, time as _t
+            _msg = (obj.get("choices") or [{}])[0].get("message") or {}
+            _calls = _msg.get("tool_calls") or []
+            _names = [(c.get("function") or {}).get("name", "?") for c in _calls]
+            _txt = _msg.get("content") or ""
+            if isinstance(_txt, list):
+                _txt = "".join(b.get("text", "") for b in _txt if isinstance(b, dict))
+            _ev = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "shim-events.log")
+            with open(_ev, "a", encoding="utf-8") as fh:
+                fh.write(json.dumps({"ts": round(_t.time(), 2), "model": obj.get("model"),
+                                     "tools": _names, "chars": len(_txt),
+                                     "msgs": len(payload.get("messages") or [])}) + "\n")
+        except (OSError, AttributeError, TypeError):
+            pass
+
         if wants_stream:
             return self._send(200, to_sse(obj), "text/event-stream")
         return self._send(200, raw, "application/json")

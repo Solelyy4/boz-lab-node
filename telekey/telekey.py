@@ -17,6 +17,7 @@ import shutil
 import sqlite3
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -116,6 +117,9 @@ BM_AGENT_PREFIX = ("Jawab dalam Bahasa Malaysia yang padat. Kamu ada tools penuh
                    "SALIN LITERAL: bila tugasan beri rentetan tepat (nama fail, kandungan, arahan "
                    "shell), salin AKSARA DEMI AKSARA — jangan tukar tanda, jangan 'rapikan'. Selepas "
                    "menulis, baca semula dan bandingkan dengan yang diminta; tak sama = tulis semula. "
+                   "JANGAN TIPU NOMBOR: bila hasil kiraan perlu masuk fail, buat DALAM SATU arahan "
+                   "alat yang mengira dan menulis sekali (cth `python3 -c \"open('f','w').write('H=%d'%(47*89))\"`), "
+                   "jangan taip semula angkanya dengan tangan — transkripsi manual ialah punca salah. "
                    "Tugasan: ")
 UPGRADE_PLAYBOOK = (
     " [PLAYBOOK UPGRADE BOT] Muat skill `telekey-bot-ops` dahulu (skill_view) untuk peta penuh. "
@@ -727,7 +731,99 @@ def _router_alive():
         s.close()
 
 
-def _agent_core(prompt, tier="medium", timeout=None):
+def _events_path():
+    """Fail peristiwa shim: satu baris setiap panggilan model (langkah agen).
+
+    Penting: pilih fail yang BENAR-BENAR wujud. `~/persist/bin` juga wujud pada
+    nod, jadi memilih folder pertama yang ada membuatkan bot memantau fail kosong
+    dan status tidak pernah bergerak.
+    """
+    cands = []
+    p = os.environ.get("TELEKEY_EVENTS_FILE")
+    if p:
+        cands.append(Path(p))
+    home = Path(os.environ.get("HERMES_HOME") or "")
+    if str(home) not in ("", "."):
+        cands += [home / "nine" / "shim-events.log", home / "bin" / "shim-events.log"]
+    cands.append(BASE / "nine" / "shim-events.log")
+    ada = [c for c in cands if c.is_file()]
+    if ada:
+        return max(ada, key=lambda c: c.stat().st_mtime)
+    for c in cands:
+        if c.parent.is_dir():
+            return c
+    return cands[-1]
+
+
+def _status_text(state):
+    """Baris status hidup: masa, bilangan langkah, alat yang benar-benar dipanggil."""
+    el = int(time.time() - float(state.get("t0") or time.time()))
+    steps = state.get("steps") or []
+    tools = [t for s in steps for t in (s.get("tools") or []) if t]
+    parts = ["[%ds] langkah %d" % (el, len(steps))]
+    if tools:
+        uniq = list(dict.fromkeys(tools))[-4:]
+        parts.append("alat: " + " > ".join(uniq))
+    if state.get("model"):
+        parts.append(str(state["model"]))
+    return "\n".join(parts)
+
+
+def _run_with_progress(cmd, tmo, on_event=None):
+    """Jalankan hermes sambil melapor langkah. Output ke fail (elak deadlock paip)."""
+    out_f = tempfile.TemporaryFile(mode="w+", encoding="utf-8", errors="replace")
+    err_f = tempfile.TemporaryFile(mode="w+", encoding="utf-8", errors="replace")
+    ev = _events_path()
+    try:
+        off = ev.stat().st_size if ev.is_file() else 0
+    except OSError:
+        off = 0
+    p = subprocess.Popen(cmd, stdout=out_f, stderr=err_f, cwd=str(BASE), env=_agent_env())
+    deadline = time.time() + tmo
+    steps = []
+    try:
+        while True:
+            if ev.is_file():
+                try:
+                    with open(ev, encoding="utf-8", errors="replace") as fh:
+                        fh.seek(off)
+                        for line in fh:
+                            line = line.strip()
+                            if not line:
+                                continue
+                            try:
+                                steps.append(json.loads(line))
+                            except ValueError:
+                                pass
+                        off = fh.tell()
+                except OSError:
+                    pass
+                if steps and on_event:
+                    try:
+                        on_event(list(steps))
+                    except Exception:
+                        pass
+            rc = p.poll()
+            if rc is not None:
+                break
+            if time.time() > deadline:
+                p.kill()
+                p.wait(10)
+                raise subprocess.TimeoutExpired(cmd, tmo)
+            time.sleep(0.6)
+    finally:
+        if p.poll() is None:
+            p.kill()
+        out_f.seek(0)
+        err_f.seek(0)
+        out = out_f.read()
+        err = err_f.read()
+        out_f.close()
+        err_f.close()
+    return p.returncode, out, err
+
+
+def _agent_core(prompt, tier="medium", timeout=None, on_event=None):
     """Agen Hermes sebenar via `hermes -z` — model 9router Mistral ikut tier.
     Model inilah yang dapat skills + tools penuh. Balas (output|None, err|None, nota)."""
     exe = _hermes_exe()
@@ -769,19 +865,18 @@ def _agent_core(prompt, tier="medium", timeout=None):
             cmd += ["--profile", p_prof]
         cmd += ["-m", str(model), "--provider", str(provider), "-z", prompt]
         try:
-            p = subprocess.run(cmd, capture_output=True, encoding="utf-8", errors="replace",
-                               timeout=tmo, cwd=str(BASE), env=_agent_env())
+            rc, so, se = _run_with_progress(cmd, tmo, on_event)
         except subprocess.TimeoutExpired:
             last = f"{model}: lebih {tmo}s"
             continue
         except Exception as e:
             last = f"{model}: {type(e).__name__}: {e}"
             continue
-        out = _strip_hermes_meta((p.stdout or "").strip())
+        out = _strip_hermes_meta((so or "").strip())
         if out:
             note = f"model={model} tier={tier}" + ("" if i == 0 else f" fallback#{i}")
             return out[:4000], None, note
-        last = f"{model}: kosong rc={p.returncode} {(p.stderr or '').strip()[-200:]}"
+        last = f"{model}: kosong rc={rc} {(se or '').strip()[-200:]}"
     return None, f"agen gagal — {last}"[:500], ""
 
 
@@ -1192,10 +1287,33 @@ async def _run_agent_task(update, text, tier=None, extra=""):
     lab = {"hard": "besar (reasoning)", "medium": "sederhana (codestral)",
            "easy": "ringan (ministral)"}.get(tier, tier)
     await reply_smart(update.message, f">> tugasan dikesan — agen {lab} dijalankan...")
-    task = asyncio.create_task(asyncio.to_thread(_agent_core, prompt, tier))
+    status = await update.message.reply_text("[0s] mula | 0 langkah")
+    state = {"t0": time.time(), "steps": []}
+
+    def on_event(steps):
+        state["steps"] = steps
+        mdl = next((s.get("model") for s in reversed(steps) if s.get("model")), None)
+        if mdl:
+            state["model"] = mdl
+
+    task = asyncio.create_task(asyncio.to_thread(_agent_core, prompt, tier, None, on_event))
     pulse = asyncio.create_task(_typing_pulse(update.message, task))
+    last = ""
+    while not task.done():
+        await asyncio.sleep(1.3)
+        txt = _status_text(state)
+        if txt != last:
+            try:
+                await status.edit_text(txt)
+            except Exception:
+                pass
+            last = txt
     out, err, note = await task
     pulse.cancel()
+    try:
+        await status.delete()
+    except Exception:
+        pass
     if note:
         log.info("agen: %s", note)
     await _after_agent(update, out, err)
