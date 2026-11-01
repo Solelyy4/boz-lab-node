@@ -41,6 +41,9 @@ def tasks(tag: str) -> list[dict]:
     f_heavy = WORK / f"heavy_{tag}.txt"
     for f in (f_med, f_heavy):
         f.unlink(missing_ok=True)
+    # Nilai sebenar dikira di sini, bukan diteka — semakan mesti bandingkan NILAI,
+    # bukan sekadar awalan "N=", jika tidak model yang salah kira tetap lulus.
+    py_count = len(list((KIT / "telekey").glob("*.py")))
     return [
         {
             "id": "senang",
@@ -61,8 +64,9 @@ def tasks(tag: str) -> list[dict]:
                        "(lapisan itu sahaja, bukan subfolder). Kemudian tulis nombor itu ke fail "
                        f"{f_heavy.as_posix()} dengan format N= diikuti nilai nombor itu. "
                        "Laksanakan dengan alat, jangan teka."),
-            "check": lambda out: f_heavy.exists() and f_heavy.read_text(errors="ignore").strip().startswith("N="),
-            "expect": f"fail {f_heavy.name} bermula N=",
+            "check": lambda out: (f_heavy.exists()
+                                  and f_heavy.read_text(errors="ignore").strip() == f"N={py_count}"),
+            "expect": f"fail {f_heavy.name} berisi tepat N={py_count}",
         },
     ]
 

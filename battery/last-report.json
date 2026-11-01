@@ -1,11 +1,69 @@
 {
+ "codestral": {
+  "model": "mistral/codestral-latest",
+  "tasks": {
+   "senang": {
+    "lulus": true,
+    "saat": 18.8,
+    "jawapan": "4183",
+    "ralat": null
+   },
+   "sederhana": {
+    "lulus": true,
+    "saat": 25.6,
+    "jawapan": "Fail C:/Users/zahin/Downloads/tunnel-kit/battery/medium_codestral.txt berjaya ditulis dan dibaca semula. Isinya ialah:  ``` BARIS-codestral ```",
+    "ralat": null
+   },
+   "berat": {
+    "lulus": true,
+    "saat": 22.9,
+    "jawapan": "N=1",
+    "ralat": null
+   }
+  }
+ },
  "ministral": {
   "model": "mistral/ministral-8b-latest",
   "tasks": {
+   "senang": {
+    "lulus": true,
+    "saat": 22.4,
+    "jawapan": "4183",
+    "ralat": null
+   },
    "sederhana": {
     "lulus": true,
-    "saat": 27.8,
-    "jawapan": "## ✅ **Tugas Selesai**  Fail `C:/Users/zahin/Downloads/tunnel-kit/battery/medium_ministral.txt` telah ditulis dan dibaca semula dengan kandungan tepat:  ``` BAR",
+    "saat": 23.2,
+    "jawapan": "Fail **C:/Users/zahin/Downloads/tunnel-kit/battery/medium_ministral.txt** telah ditulis dan dibaca dengan kandungan berikut:  ``` BARIS-ministral BARIS-ministra",
+    "ralat": null
+   },
+   "berat": {
+    "lulus": true,
+    "saat": 20.3,
+    "jawapan": "Tugas selesai: - Fail `.py` dalam `C:/Users/zahin/Downloads/tunnel-kit/telekey`: **1** - Nilai ditulis ke `C:/Users/zahin/Downloads/tunnel-kit/battery/heavy_min",
+    "ralat": null
+   }
+  }
+ },
+ "large4": {
+  "model": "mistral/mistral-large-4",
+  "tasks": {
+   "senang": {
+    "lulus": true,
+    "saat": 22.2,
+    "jawapan": "4183",
+    "ralat": null
+   },
+   "sederhana": {
+    "lulus": true,
+    "saat": 36.1,
+    "jawapan": "Selesai, BOZ.  Fail ditulis dan dibaca semula:  - Path: `C:/Users/zahin/Downloads/tunnel-kit/battery/medium_large4.txt` - Isi (1 baris, 12 bait): `BARIS-large4`",
+    "ralat": null
+   },
+   "berat": {
+    "lulus": true,
+    "saat": 39.9,
+    "jawapan": "Selesai, BOZ.  - Folder `C:/Users/zahin/Downloads/tunnel-kit/telekey` ada 1 fail .py sahaja pada lapisan itu (iaitu `telekey.py`) — dikira dengan `python` (buka",
     "ralat": null
    }
   }

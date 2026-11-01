@@ -111,6 +111,8 @@ BM_AGENT_PREFIX = ("Jawab dalam Bahasa Malaysia yang padat. Kamu ada tools penuh
                    "KIRAAN WAJIB GUNA ALAT: sebarang aritmetik — walaupun 2+2 atau 'balas nombor "
                    "sahaja' — mesti dikira dengan terminal/python, bukan dalam kepala; jawapan angka "
                    "tanpa bukti alat dikira SALAH. "
+                   "JALANKAN, JANGAN TUNJUK: jangan papar kod atau arahan terminal sebagai "
+                   "jawapan — jalankan alat itu dan beri HASILNYA. Menunjuk perintah = gagal. "
                    "SALIN LITERAL: bila tugasan beri rentetan tepat (nama fail, kandungan, arahan "
                    "shell), salin AKSARA DEMI AKSARA — jangan tukar tanda, jangan 'rapikan'. Selepas "
                    "menulis, baca semula dan bandingkan dengan yang diminta; tak sama = tulis semula. "
@@ -755,11 +757,16 @@ def _agent_core(prompt, tier="medium", timeout=None):
     last = "tiada percubaan"
     prof = "lite" if str(tier) in ("easy", "medium") else "default"
     # Profil hanya wujud pada pemasangan PC; di nod ia akan menggagalkan setiap panggilan.
-    use_profile = (Path(os.environ.get("HERMES_HOME") or "") / "profiles" / prof).is_dir()
     for i, (model, provider) in enumerate(plan[:3]):
+        # Model kecil tercemar oleh prompt besar: ministral 8B menyalin nombor "128"
+        # daripada teks skill lalu menulisnya sebagai kandungan fail. Profil lite
+        # (tanpa auto_load) menjadikannya tepat 3/3 dalam ujian.
+        small = ("8b" in str(model).lower()) or ("ministral" in str(model).lower())
+        p_prof = "lite" if small else prof
+        use_profile = (Path(os.environ.get("HERMES_HOME") or "") / "profiles" / p_prof).is_dir()
         cmd = [str(exe)]
         if use_profile:
-            cmd += ["--profile", prof]
+            cmd += ["--profile", p_prof]
         cmd += ["-m", str(model), "--provider", str(provider), "-z", prompt]
         try:
             p = subprocess.run(cmd, capture_output=True, encoding="utf-8", errors="replace",
