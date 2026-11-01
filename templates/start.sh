@@ -34,6 +34,11 @@ echo "start.sh jalan pada $STAMP di $(hostname)" > start-result.txt
 
 # --- 1. Kebergantungan (mesin baru tiada apa-apa) ----------------------------
 command -v python3 >/dev/null || sudo apt-get install -y -qq python3
+# Audio: ffmpeg untuk tukar suara -> PCM, faster-whisper untuk transkripsi.
+# Tanpa ini mesej suara BOZ tidak dapat didengar pada nod.
+command -v ffmpeg >/dev/null || sudo apt-get install -y -qq ffmpeg >> start.log 2>&1
+python3 -c "import faster_whisper" 2>/dev/null \
+  || pip install -q --break-system-packages faster-whisper >> start.log 2>&1
 if ! python3 -c "import telegram" >/dev/null 2>&1; then
   echo "memasang python-telegram-bot" >> start.log
   pip install -q --break-system-packages "python-telegram-bot==22.*" >> start.log 2>&1 \

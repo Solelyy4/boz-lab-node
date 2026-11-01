@@ -1279,7 +1279,17 @@ async def _run_agent_task(update, text, tier=None, extra=""):
         return await reply_smart(update.message,
                                  f"had {AGENT_DAILY_CAP} agen/hari dah capai — esok sambung")
     tier = tier or pick_agent_tier(text)
-    prompt = BM_AGENT_PREFIX + text
+    # Agen ialah `hermes -z` (satu pusingan, tiada memori perbualan sendiri).
+    # Tanpa konteks ini bot lupa apa yang dibualkan sebelah menyebelah chat.
+    try:
+        hist = chat_history(cid, 6)
+    except Exception:
+        hist = []
+    ctx = ""
+    if hist:
+        ctx = ("KONTEKS PERBUALAN SEBELUM INI (rujuk jika relevan, jangan ulang):\n"
+               + "\n".join(f"{r}: {c[:300]}" for r, c in hist) + "\n\n")
+    prompt = BM_AGENT_PREFIX + ctx + journal_context() + text
     if SELF_UPGRADE_HINT.search(text):
         prompt += UPGRADE_PLAYBOOK
     prompt += extra
@@ -1316,6 +1326,7 @@ async def _run_agent_task(update, text, tier=None, extra=""):
         pass
     if note:
         log.info("agen: %s", note)
+    journal_add(cid, text, (out or err or "")[:80])
     await _after_agent(update, out, err)
 
 
@@ -1364,6 +1375,10 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                       "/revoke prefix  matikan key\n\n"
                       "AI & AGEN\n"
                       "teks biasa  soalan = jawab terus; tugasan = agen auto\n"
+                      "suara  hantar mesej suara — bot dengar dan buat\n"
+                      "fail  hantar txt/md/csv/pdf/docx — bot baca dan jawab\n"
+                      "/ingat 30m minum air  bot ingatkan kau sendiri\n"
+                      "/ingatan  senarai peringatan aktif\n"
                       "/ai soalan  chat ringkas\n"
                       "/agent [hard|medium|easy|max] tugas  agen pilih model\n"
                       "/upgrade tugas  agen ubah bot ini sendiri (selftest + restart)\n"
@@ -1745,7 +1760,247 @@ async def handler_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await reply_smart(update.message, out or "(kosong)")
 
 
-# ------------------------------------------------------------- selftest -----
+DOC_SUFFIX = {".txt", ".md", ".csv", ".json", ".py", ".log", ".yaml", ".yml", ".pdf", ".docx"}
+
+
+def _extract_doc_text(path):
+    """Teks daripada fail yang BOZ hantar. Kosong = tidak dapat dibaca."""
+    suffix = Path(path).suffix.lower()
+    try:
+        if suffix in (".txt", ".md", ".csv", ".json", ".py", ".log", ".yaml", ".yml"):
+            return Path(path).read_text(encoding="utf-8", errors="replace")[:20000]
+        if suffix == ".pdf":
+            from pypdf import PdfReader
+            pages = PdfReader(str(path)).pages
+            return "\n".join((pg.extract_text() or "") for pg in pages)[:20000]
+        if suffix == ".docx":
+            import docx
+            return "\n".join(p.text for p in docx.Document(str(path)).paragraphs)[:20000]
+    except Exception:
+        return ""
+    return ""
+
+
+async def handler_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Fail yang dihantar: baca teks, kemudian suruh agen jawab/ringkas."""
+    if update.effective_chat.type != "private":
+        return
+    doc = update.message.document
+    name = doc.file_name or "fail"
+    suffix = Path(name).suffix.lower()
+    if suffix not in DOC_SUFFIX:
+        return await reply_smart(
+            update.message,
+            "!jenis fail %s belum disokong — hantar txt/md/csv/json/pdf/docx" % (suffix or "?"))
+    if (doc.file_size or 0) > 20 * 1024 * 1024:
+        return await reply_smart(update.message, "!fail terlalu besar (maks 20 MB)")
+    tmp = BASE / ("doc_%d%s" % (int(time.time()), suffix))
+    try:
+        f = await doc.get_file()
+        await f.download(custom_path=str(tmp))
+    except Exception as e:
+        return await reply_smart(update.message, "!gagal muat turun: " + type(e).__name__)
+    text = await asyncio.to_thread(_extract_doc_text, str(tmp))
+    tmp.unlink(missing_ok=True)
+    if not text.strip():
+        return await reply_smart(
+            update.message,
+            "!teks tidak dapat dibaca — PDF imbas/gambar perlukan OCR, atau pustaka pdf/docx tiada")
+    q = (update.message.caption or "").strip() or "Ringkaskan dokumen ini dan senaraikan perkara penting."
+    payload = "%s\n\n--- ISI FAIL %s ---\n%s" % (q, name, text[:12000])
+    await _run_agent_task(update, payload, tier="hard")
+
+
+# ------------------------------------------------------- personal agent -----
+def _ffmpeg_exe():
+    for c in (os.environ.get("TELEKEY_FFMPEG"),
+              shutil.which("ffmpeg"),
+              str(Path(os.environ.get("LOCALAPPDATA") or "") / "hermes/tools/ffmpeg-9.0.1-win32-x64/bin/ffmpeg.exe")):
+        if c and Path(c).exists():
+            return c
+    return None
+
+
+_WHISPER = {}
+_WHISPER_LOCK = threading.Lock()
+
+
+def _whisper_model():
+    """Muat model whisper sekali sahaja (CPU int8). Saiz ikut env TELEKEY_WHISPER_MODEL."""
+    with _WHISPER_LOCK:
+        if "m" not in _WHISPER:
+            from faster_whisper import WhisperModel
+            size = os.environ.get("TELEKEY_WHISPER_MODEL") or "small"
+            root = Path(os.environ.get("HERMES_HOME") or ".") / "models" / "whisper"
+            root.mkdir(parents=True, exist_ok=True)
+            _WHISPER["m"] = WhisperModel(size, device="cpu", compute_type="int8", download_root=str(root))
+        return _WHISPER["m"]
+
+
+def _transcribe(path, lang=None):
+    """Audio -> teks. Guna ffmpeg (PCM 16k mono) kerana PyAV tidak serasi."""
+    exe = _ffmpeg_exe()
+    if not exe:
+        return "", "ffmpeg tiada"
+    raw_fd, raw_name = tempfile.mkstemp(suffix=".raw")
+    os.close(raw_fd)          # Windows: pemegang terbuka mengunci fail, unlink gagal
+    raw = Path(raw_name)
+    try:
+        subprocess.run([exe, "-v", "error", "-i", str(path), "-ar", "16000", "-ac", "1",
+                        "-f", "s16le", "-y", str(raw)], check=True, timeout=180,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        import numpy as np
+        pcm = np.fromfile(str(raw), dtype=np.int16).astype("float32") / 32768.0
+        if pcm.size < 1600:
+            return "", "audio terlalu pendek"
+        seg, info = _whisper_model().transcribe(pcm, language=lang or "ms", beam_size=1, vad_filter=True)
+        return " ".join(s.text.strip() for s in seg).strip(), info.language
+    except Exception as e:
+        return "", "%s: %s" % (type(e).__name__, str(e)[:120])
+    finally:
+        raw.unlink(missing_ok=True)
+
+
+JOURNAL = Path(os.environ.get("HERMES_HOME") or ".") / "memories" / "BOT-JOURNAL.md"
+
+
+def journal_add(chat_id, text, hasil=""):
+    """Jurnal peribadi: apa yang BOZ minta, supaya bot kenal corak kerjanya."""
+    try:
+        JOURNAL.parent.mkdir(parents=True, exist_ok=True)
+        with JOURNAL.open("a", encoding="utf-8") as fh:
+            fh.write("- %s [%s] minta: %s | hasil: %s\n"
+                     % (wib_now()[11:16], chat_id, (text or "").replace("\n", " ")[:120],
+                        (hasil or "-").replace("\n", " ")[:80]))
+    except OSError:
+        pass
+
+
+def journal_context(n=8):
+    try:
+        lines = JOURNAL.read_text(encoding="utf-8", errors="replace").strip().splitlines()
+    except OSError:
+        return ""
+    lines = [l for l in lines if l.strip()][-n:]
+    if not lines:
+        return ""
+    return "JURNAL TERKINI BOZ (rujuk jika relevan):\n" + "\n".join(lines) + "\n\n"
+
+
+# --- peringatan berjadual (proaktif) ----------------------------------------
+REM_DB = BASE / "reminders.db"
+
+
+def _rem_conn():
+    c = sqlite3.connect(str(REM_DB), timeout=10)
+    c.execute("PRAGMA journal_mode=WAL")
+    c.execute("PRAGMA busy_timeout=5000")
+    c.execute("CREATE TABLE IF NOT EXISTS rem (id INTEGER PRIMARY KEY AUTOINCREMENT,"
+              " chat INTEGER, due INTEGER, text TEXT, sent INTEGER DEFAULT 0)")
+    return c
+
+
+def add_reminder(chat_id, due_ts, text):
+    with _rem_conn() as c:
+        c.execute("INSERT INTO rem(chat, due, text) VALUES(?,?,?)", (int(chat_id), int(due_ts), text))
+
+
+def parse_when(s):
+    """'30m', '2j', 'dalam 15 minit', '1 hari', 'pukul 15:30' -> epoch WIB."""
+    t = (s or "").lower()
+    m = re.search(r"(\d+)\s*(m|min|minit|minute)", t)
+    if m:
+        return time.time() + int(m.group(1)) * 60
+    m = re.search(r"(\d+)\s*(j|jam|h|hour)", t)
+    if m:
+        return time.time() + int(m.group(1)) * 3600
+    m = re.search(r"(\d+)\s*(hari|day)", t)
+    if m:
+        return time.time() + int(m.group(1)) * 86400
+    m = re.search(r"(\d{1,2})[:.](\d{2})", t)
+    if m:
+        now = time.time() + 7 * 3600
+        lt = time.gmtime(now)
+        target = time.mktime((lt.tm_year, lt.tm_mon, lt.tm_mday, int(m.group(1)), int(m.group(2)), 0, 0, 0, 0))
+        target -= 7 * 3600
+        if target <= now:
+            target += 86400
+        return target
+    return None
+
+
+def reminder_loop(token):
+    """Hantar peringatan tepat pada masanya — bot yang menghubungi BOZ dahulu."""
+    while True:
+        try:
+            with _rem_conn() as c:
+                rows = c.execute("SELECT id, chat, text FROM rem WHERE sent=0 AND due<=?",
+                                 (int(time.time()),)).fetchall()
+                for rid, chat, txt in rows:
+                    r = requests.post("https://api.telegram.org/bot%s/sendMessage" % token,
+                                      json={"chat_id": chat, "text": "PERINGATAN: " + txt}, timeout=20)
+                    if r.ok:
+                        c.execute("UPDATE rem SET sent=1 WHERE id=?", (rid,))
+        except Exception:
+            pass
+        time.sleep(20)
+
+
+def _rem_token():
+    try:
+        cfg = json.loads((BASE / "config.json").read_text(encoding="utf-8"))
+        return (cfg.get("token") or os.environ.get("TELEKEY_TOKEN") or "").strip()
+    except Exception:
+        return os.environ.get("TELEKEY_TOKEN") or ""
+
+
+async def handler_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Mesej suara -> teks -> tugasan. Ini yang menjadikan bot boleh diajak bercakap."""
+    if update.effective_chat.type != "private":
+        return
+    media = update.message.voice or update.message.audio
+    if not media:
+        return
+    f = await media.get_file()
+    tmp = BASE / ("voz_%d.oga" % int(time.time()))
+    try:
+        await f.download(custom_path=str(tmp))
+    except Exception as e:
+        return await reply_smart(update.message, "!gagal muat turun audio: " + type(e).__name__)
+    await update.message.chat.send_action("typing")
+    teks, lang = await asyncio.to_thread(_transcribe, str(tmp))
+    tmp.unlink(missing_ok=True)
+    if not teks:
+        return await reply_smart(update.message, "!suara tidak dapat difahami (%s)" % lang)
+    await reply_smart(update.message, "[dengar] " + teks)
+    await _dispatch(update, teks)
+
+
+async def cmd_ingat(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """/ingat 30m minum air — bot akan hubungi kau sendiri."""
+    arg = (update.message.text or "").partition(" ")[2].strip()
+    if not arg:
+        return await reply_smart(update.message, "contoh: /ingat 30m minum air")
+    when = parse_when(arg)
+    if not when:
+        return await reply_smart(update.message, "!masa tidak jelas — guna 30m, 2j, 1 hari, atau 15:30")
+    txt = re.sub(r"^\S+\s*", "", arg, count=1).strip() or "peringatan"
+    add_reminder(update.effective_chat.id, when, txt)
+    left = int(when - time.time())
+    await reply_smart(update.message, "OK — aku ingatkan kau dalam %d minit: %s"
+                      % (max(1, left // 60), txt))
+
+
+async def cmd_ingatan(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    with _rem_conn() as c:
+        rows = c.execute("SELECT due, text FROM rem WHERE sent=0 ORDER BY due LIMIT 20").fetchall()
+    if not rows:
+        return await reply_smart(update.message, "tiada peringatan aktif")
+    baris = ["%s  %s" % (time.strftime("%d/%m %H:%M", time.localtime(d + 7 * 3600)), t) for d, t in rows]
+    await reply_smart(update.message, "PERINGATAN AKTIF (WIB)\n" + "\n".join(baris))
+
+
+# ------------------------------------------------------------- selftest ------
 def _mock_upstream(trailing=True):
     """Mock upstream: badan JSON + 'data: [DONE]' (tiru bug 9router) supaya parse diuji."""
     body = json.dumps({"choices": [{"message": {"role": "assistant", "content": "halo-ok"}}],
@@ -2030,8 +2285,15 @@ def main():
     app.add_handler(CommandHandler("reset", cmd_reset))
     app.add_handler(CommandHandler("cari", cmd_cari))
     app.add_handler(CommandHandler("ping", cmd_ping))
+    app.add_handler(CommandHandler("ingat", cmd_ingat))
+    app.add_handler(CommandHandler("ingatan", cmd_ingatan))
+    app.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, handler_voice))
+    _tok = _rem_token()
+    if _tok:
+        threading.Thread(target=reminder_loop, args=(_tok,), daemon=True).start()
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handler_text))
     app.add_handler(MessageHandler(filters.PHOTO, handler_photo))
+    app.add_handler(MessageHandler(filters.Document.ALL, handler_document))
     app.add_error_handler(on_error)
     print("POLLING mula — bot hidup")
     app.run_polling(allowed_updates=Update.ALL_TYPES)

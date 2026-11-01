@@ -32,6 +32,7 @@ save() {
   tar czf - -C "$SRC" \
     --exclude='./.env' --exclude='./secrets' --exclude='*.log' --exclude='*.pid' \
     --exclude='./hvenv' --exclude='./bin' --exclude='./npm' \
+    --exclude='./models' \
     --exclude='./nine/backups' --exclude='./nine/runtime' --exclude='./nine/model-catalog*.json' . \
     | openssl enc -aes-256-cbc -pbkdf2 -salt -pass env:PASS -out state.tar.enc \
     || die "sulitkan gagal"
