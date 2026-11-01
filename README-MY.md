@@ -101,23 +101,30 @@ aktif pada satu masa).
 
 ### 9Router Mistral di Hermes — status diukur (bateri 3 saiz tugasan)
 
-| Model | Chat (soalan/kerja) | Tugasan agen | Sesi lama | Nota |
-|---|---|---|---|---|
-| `mistral/codestral-latest` | lulus | **3/3 lulus** | lulus (ingat konteks) | paling seimbang |
-| `mistral/mistral-large-4` | lulus | **3/3 lulus** | belum | paling teliti |
-| `mistral/ministral-8b-latest` | lulus | **3/3 lulus bila diulang**, 2/3 dalam larian berturut | belum | kadang tukar aksara literal (`-` → `=`) |
-| `mistral/mistral-large-latest` | **dibuang** | — | — | 403 `tier_not_allowed` pada semua 32 akaun |
+Dua pusingan penuh berturut-turut, semakan ketat (kandungan fail mesti **tepat**, nilai N mesti
+**sama dengan kiraan sebenar** — bukan sekadar wujud):
 
-Bateri mengesahkan kerja dari **kesan fizikal di disk** (fail benar-benar ditulis dan dibaca
-semula), bukan dari kata-kata model. Tiada model yang menjawab dengan "ini langkah-langkahnya".
-Tugasan yang diuji: kiraan (senang), tulis+baca fail dengan kandungan tepat (sederhana), kira
-bilangan fail melalui alat lalu tulis hasil (berat).
+| Model | Chat Hermes | Pusingan 1 | Pusingan 2 |
+|---|---|---|---|
+| `mistral/codestral-latest` | lulus | **3/3** | **3/3** |
+| `mistral/ministral-8b-latest` | lulus | **3/3** | **3/3** |
+| `mistral/mistral-large-4` | lulus | **3/3** | **3/3** |
+| **Jumlah** | | **9/9** | **9/9** |
 
-Dua peraturan keras dimasukkan ke prompt setiap panggilan agen dan ke `AGENTS.md`:
+Tugasan: kiraan (senang) · tulis fail dengan kandungan literal tepat lalu baca semula (sederhana) ·
+kira bilangan fail melalui alat kemudian tulis nilai itu (berat). Semua disahkan dari disk.
+`mistral/mistral-large-latest` dibuang — 403 `tier_not_allowed` pada semua 32 akaun.
 
-1. **Kiraan wajib guna alat.** Sebelum ini codestral menjawab `4273` dan ministral `4223` untuk
-   47×89 (dua-dua salah). Selepas peraturan: `4183`, dikira dengan `python3`.
-2. **Salin literal aksara demi aksara**, kemudian baca semula dan bandingkan.
+**Tiga punca sebenar yang ditemui melalui bateri ini:**
+
+1. **Model kira dalam kepala.** codestral menjawab `4273`, ministral `4223` untuk 47×89. Selepas
+   peraturan "kiraan wajib alat": `4183` dikira dengan `python3`.
+2. **Model tunjuk kod, bukan jalankan.** codestral membalas ```` ```python print(47 * 89) ``` ````
+   tanpa melaksanakan. Selepas peraturan "jalankan, jangan tunjuk": hasil sebenar sahaja.
+3. **Prompt besar mencemar model kecil.** Ministral 8B menulis `BARIS=128` — ia menyalin nombor
+   `128` daripada teks skill `tool-discipline` yang disuntik auto. Ditemui dengan menguji
+   `--profile lite` (tanpa auto_load): **3/3 tepat**. `_agent_core` kini menghantar model 8B ke
+   profil `lite` secara automatik.
 
 **Peraturan sesi:** model dikunci semasa sesi dicipta. `--resume` dengan `-m` berbeza akan
 ditolak secara reka bentuk; tukar model dari dalam sesi dengan `/model`.

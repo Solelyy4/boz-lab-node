@@ -4,20 +4,20 @@
   "tasks": {
    "senang": {
     "lulus": true,
-    "saat": 18.8,
+    "saat": 19.6,
     "jawapan": "4183",
     "ralat": null
    },
    "sederhana": {
     "lulus": true,
-    "saat": 25.6,
-    "jawapan": "Fail C:/Users/zahin/Downloads/tunnel-kit/battery/medium_codestral.txt berjaya ditulis dan dibaca semula. Isinya ialah:  ``` BARIS-codestral ```",
+    "saat": 26.6,
+    "jawapan": "Fail C:/Users/zahin/Downloads/tunnel-kit/battery/medium_codestral.txt berjaya ditulis dengan kandungan BARIS-codestral.",
     "ralat": null
    },
    "berat": {
     "lulus": true,
-    "saat": 22.9,
-    "jawapan": "N=1",
+    "saat": 23.9,
+    "jawapan": "Nombor fail .py dalam folder C:/Users/zahin/Downloads/tunnel-kit/telekey ialah 1. Nombor itu telah ditulis ke fail C:/Users/zahin/Downloads/tunnel-kit/battery/h",
     "ralat": null
    }
   }
@@ -27,20 +27,20 @@
   "tasks": {
    "senang": {
     "lulus": true,
-    "saat": 22.4,
+    "saat": 18.0,
     "jawapan": "4183",
     "ralat": null
    },
    "sederhana": {
     "lulus": true,
-    "saat": 23.2,
-    "jawapan": "Fail **C:/Users/zahin/Downloads/tunnel-kit/battery/medium_ministral.txt** telah ditulis dan dibaca dengan kandungan berikut:  ``` BARIS-ministral BARIS-ministra",
+    "saat": 22.1,
+    "jawapan": "Fail **C:/Users/zahin/Downloads/tunnel-kit/battery/medium_ministral.txt** berisi: ``` BARIS-ministral ```",
     "ralat": null
    },
    "berat": {
     "lulus": true,
-    "saat": 20.3,
-    "jawapan": "Tugas selesai: - Fail `.py` dalam `C:/Users/zahin/Downloads/tunnel-kit/telekey`: **1** - Nilai ditulis ke `C:/Users/zahin/Downloads/tunnel-kit/battery/heavy_min",
+    "saat": 18.2,
+    "jawapan": "Tugas selesai: fail `C:/Users/zahin/Downloads/tunnel-kit/battery/heavy_ministral.txt` ditulis dengan kandungan **N=1**.",
     "ralat": null
    }
   }
@@ -50,20 +50,20 @@
   "tasks": {
    "senang": {
     "lulus": true,
-    "saat": 22.2,
+    "saat": 17.1,
     "jawapan": "4183",
     "ralat": null
    },
    "sederhana": {
     "lulus": true,
-    "saat": 36.1,
-    "jawapan": "Selesai, BOZ.  Fail ditulis dan dibaca semula:  - Path: `C:/Users/zahin/Downloads/tunnel-kit/battery/medium_large4.txt` - Isi (1 baris, 12 bait): `BARIS-large4`",
+    "saat": 26.2,
+    "jawapan": "Selesai, BOZ.  Fail ditulis dan disahkan: C:/Users/zahin/Downloads/tunnel-kit/battery/medium_large4.txt  Isi fail (dibaca semula, 1 baris, 12 bait): BARIS-large",
     "ralat": null
    },
    "berat": {
     "lulus": true,
-    "saat": 39.9,
-    "jawapan": "Selesai, BOZ.  - Folder `C:/Users/zahin/Downloads/tunnel-kit/telekey` ada 1 fail .py sahaja pada lapisan itu (iaitu `telekey.py`) — dikira dengan `python` (buka",
+    "saat": 40.3,
+    "jawapan": "Selesai, BOZ.  - Fail .py dalam C:/Users/zahin/Downloads/tunnel-kit/telekey (lapisan atas sahaja): **1** (iaitu telekey.py; config.json dan standby.sh bukan .py",
     "ralat": null
    }
   }
