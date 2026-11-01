@@ -94,10 +94,28 @@ Apa yang terbukti pada nod (ujian sebenar, bukan andaian):
 `TELEKEY_AGENT_PLAN` (lalai `deepseek-v4.1-flash|tokenomix`) menukar model agen tanpa
 mengubah kod. Provider disediakan `make-config.py` daripada `.env`.
 
-**Had sebenar:** `keys.db` bercabang — kunci API yang dicipta melalui Telegram *semasa laptop
-mati* akan hilang bila laptop hidup semula. Guna `/getkey` hanya bila laptop hidup. Alat
-`browser` belum ada Playwright di nod, jadi automasi pelayar tidak tersedia; `web`, `terminal`,
-`file`, `code_execution` semuanya jalan.
+**Had sebenar:** alat `browser` kini berfungsi (Playwright + Chromium dipasang `start.sh`,
+~120MB setiap boot). `keys.db` tidak lagi bercabang — `pull-keys.py` + cron 10 minit menggabung
+DB nod ke DB PC secara idempotent (`MAX`, bukan tambah, kerana gerbang menjamin hanya satu bot
+aktif pada satu masa).
+
+### 9Router Mistral di Hermes — status diukur
+
+| Model | Chat sesi baru | Alat + skill | Sesi lama (`--resume`) |
+|---|---|---|---|
+| `mistral/codestral-latest` | lulus 6s | lulus 13s | lulus (ingat konteks, 5s) |
+| `mistral/ministral-8b-latest` | lulus 10s | lulus 8s (arahan jelas) | belum diuji |
+| `mistral/mistral-large-4` | lulus | lulus 24s | belum diuji |
+| `mistral/mistral-large-latest` | **gagal 403** `tier_not_allowed` | — | — |
+
+`mistral-large-latest` ditolak oleh langganan Mistral kau sendiri, bukan oleh Hermes. Guna
+`mistral-large-4` untuk kerja berat.
+
+**Peraturan sesi:** model dikunci semasa sesi dicipta. `--resume` dengan `-m` berbeza akan
+ditolak secara reka bentuk; tukar model dari dalam sesi dengan `/model`.
+
+**Pemilihan model automatik:** port `127.0.0.1:20128` tertutup = bukan PC. Bot pilih 9router
+bila PC hidup, dan `TELEKEY_AGENT_PLAN` (awan) bila di nod.
 
 ---
 
