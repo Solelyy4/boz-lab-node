@@ -111,6 +111,9 @@ BM_AGENT_PREFIX = ("Jawab dalam Bahasa Malaysia yang padat. Kamu ada tools penuh
                    "KIRAAN WAJIB GUNA ALAT: sebarang aritmetik — walaupun 2+2 atau 'balas nombor "
                    "sahaja' — mesti dikira dengan terminal/python, bukan dalam kepala; jawapan angka "
                    "tanpa bukti alat dikira SALAH. "
+                   "SALIN LITERAL: bila tugasan beri rentetan tepat (nama fail, kandungan, arahan "
+                   "shell), salin AKSARA DEMI AKSARA — jangan tukar tanda, jangan 'rapikan'. Selepas "
+                   "menulis, baca semula dan bandingkan dengan yang diminta; tak sama = tulis semula. "
                    "Tugasan: ")
 UPGRADE_PLAYBOOK = (
     " [PLAYBOOK UPGRADE BOT] Muat skill `telekey-bot-ops` dahulu (skill_view) untuk peta penuh. "

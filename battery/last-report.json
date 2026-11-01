@@ -2,10 +2,10 @@
  "ministral": {
   "model": "mistral/ministral-8b-latest",
   "tasks": {
-   "senang": {
+   "sederhana": {
     "lulus": true,
-    "saat": 12.1,
-    "jawapan": "4183",
+    "saat": 21.5,
+    "jawapan": "## ✅ [TULISAN] Fail medium_ministral.txt siap  **Isi fail:** ``` BARIS-ministral ```  **Bukti:** Fail ditulis dan dibaca semula dengan kandungan tepat seperti y",
     "ralat": null
    }
   }
