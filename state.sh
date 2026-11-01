@@ -40,6 +40,9 @@ save() {
   git commit -qm "state $(date -u '+%FT%TZ')" --allow-empty
   git push -q --force "https://x-access-token:${GH_TOKEN}@github.com/${REPO_SLUG}.git" \
     HEAD:refs/heads/"$BRANCH" || die "push gagal"
+  # Penanda kejayaan: tanpa ini kegagalan push senyap (blob terlalu besar) tidak
+  # kelihatan langsung, dan kerja selepasnya hilang bila nod berganti.
+  date -u +%s > /tmp/.state-last-ok
   echo "disimpan: $(find "$SRC" -type f | wc -l) fail, $(stat -c %s state.tar.enc 2>/dev/null || echo '?') bait"
 }
 

@@ -78,12 +78,17 @@ jobs:
         continue-on-error: true
         run: |
           P="$HOME/persist"; mkdir -p "$P"
-          [ -f "$P/start.sh" ] || cp templates/start.sh "$P/start.sh"
-          chmod +x "$P/start.sh"
-          [ -d "$P/telekey" ] || cp -r telekey "$P/telekey"
-          [ -d "$P/skills" ] || cp -r skills "$P/skills"
-          [ -f "$P/make-config.py" ] || cp make-config.py "$P/make-config.py"
-          echo "bootstrap: $(find "$P" -name SKILL.md 2>/dev/null | wc -l) skill, start.sh=$([ -x "$P/start.sh" ] && echo ada)"
+          # start.sh + make-config.py milik repo, bukan data pengguna: sentiasa
+          # segarkan. Kalau tidak, salinan lama dalam blob kekal selamanya dan
+          # ciri baharu tidak pernah sampai ke nod.
+          cp templates/start.sh "$P/start.sh"; chmod +x "$P/start.sh"
+          cp make-config.py "$P/make-config.py"
+          # Semak ISI, bukan kewujudan dir: blob lama boleh simpan dir kosong,
+          # dan `[ -d ]` akan langkau salinan lalu skills hilang senyap.
+          [ -f "$P/telekey/telekey.py" ] || cp -r telekey "$P/telekey"
+          mkdir -p "$P/skills"
+          cp -r skills/. "$P/skills"/
+          echo "bootstrap: $(find "$P/skills" -name SKILL.md 2>/dev/null | wc -l) skill, start.sh=$([ -x "$P/start.sh" ] && echo ada)"
 
       # Selepas fail pulih barulah proses dijalankan — bot perlukan failnya dahulu.
       - name: Mula semula proses kau
