@@ -134,6 +134,37 @@ bila PC hidup, dan `TELEKEY_AGENT_PLAN` (awan) bila di nod.
 
 ---
 
+## 9Router di nod — Mistral kekal hidup walaupun laptop mati
+
+Laptop mati = `127.0.0.1:20128` tiada. Jadi penyelesaiannya bukan tunnel ke PC, tetapi
+**menjalankan 9Router itu sendiri di nod**:
+
+| Bila | Siapa jalankan 9router | Model untuk bot |
+|---|---|---|
+| Laptop hidup | 9router di PC | Mistral (32 akaun) |
+| Laptop mati | **9router di nod** (`start-nine.sh`) | Mistral (32 akaun sama) |
+
+`nine/` dalam `~/persist` menyimpan DB 9router (32 sambungan Mistral, tersulit dalam blob
+simpanan). Pada setiap boot: `start.sh` → `start-nine.sh` → pasang 9router dari npm, pulihkan
+DB, mula di `:20128`, tulis kunci API ke `.env` → `make-config.py` jana config Hermes → penunggu.
+
+**Bukti boot sejuk (nod baru, tiada sentuhan manusia):**
+```
+9router hidup pid 2776 pada 20128
+9router sedia di :20128
+config.yaml dijana — provider=['9router', 'tokenomix', 'groq']
+router alive: True
+_agent_core → model=mistral/codestral-latest → "mistral-hidup"
+```
+
+**Dua perangkap yang ditemui:**
+1. 9router di nod balas **SSE** (`data: [DONE]`) bila medan `stream` tiada. Bot kini menghantar
+   `stream: false` secara eksplisit.
+2. `~/persist/npm` (134 MB) dan `hvenv` (356 MB) dibawa dalam blob yang dipush setiap 2 minit.
+   Kedua-duanya dikecualikan; ia dipasang semula setiap boot (~2 minit, di latar).
+
+---
+
 ## Isi kit
 
 | Fail | Fungsi |
