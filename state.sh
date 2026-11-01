@@ -30,7 +30,8 @@ save() {
   # Rahsia TIDAK masuk blob: .env, secrets/, log, pid. Ia datang dari GitHub
   # Actions secrets pada setiap boot, jadi ia tidak pernah tersimpan di repo.
   tar czf - -C "$SRC" \
-    --exclude='./.env' --exclude='./secrets' --exclude='*.log' --exclude='*.pid' . \
+    --exclude='./.env' --exclude='./secrets' --exclude='*.log' --exclude='*.pid' \
+    --exclude='./hvenv' --exclude='./bin' . \
     | openssl enc -aes-256-cbc -pbkdf2 -salt -pass env:PASS -out state.tar.enc \
     || die "sulitkan gagal"
   git init -q

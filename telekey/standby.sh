@@ -13,6 +13,9 @@
 set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 export HERMES_HOME="$(cd "$HERE/.." && pwd)"   # .env + secrets/ ada di sini
+[ -f "$HERMES_HOME/.env" ] && { set -a; . "$HERMES_HOME/.env"; set +a; }
+# Nod tiada 9router (ia hidup di PC). Rancangan model agen ditimpa di sini.
+export TELEKEY_AGENT_PLAN="${TELEKEY_AGENT_PLAN:-deepseek-v4.1-flash|tokenomix,deepseek-v4-flash|tokenomix}"
 
 HB_URL="${HB_URL:-https://gist.githubusercontent.com/Solelyy4/d5cdf07feb91d5d89337476d2f9db7ae/raw/alive}"
 FRESH="${FRESH:-180}"     # nadi lebih muda dari ini = PC hidup

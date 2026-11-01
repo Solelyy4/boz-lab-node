@@ -72,6 +72,19 @@ jobs:
           chmod 600 "$HOME/persist/secrets/tokenharbor.key"
           echo "kunci ditulis (nilai tidak dicetak): $(wc -l < "$HOME/persist/.env") baris"
 
+      # Simpanan boleh hilang (branch state dipadam / mula dari kosong). Repo
+      # ialah salinan kedua: bawa masuk apa yang tiada supaya nod tetap berguna.
+      - name: Bootstrap dari repo bila simpanan kosong
+        continue-on-error: true
+        run: |
+          P="$HOME/persist"; mkdir -p "$P"
+          [ -f "$P/start.sh" ] || cp templates/start.sh "$P/start.sh"
+          chmod +x "$P/start.sh"
+          [ -d "$P/telekey" ] || cp -r telekey "$P/telekey"
+          [ -d "$P/skills" ] || cp -r skills "$P/skills"
+          [ -f "$P/make-config.py" ] || cp make-config.py "$P/make-config.py"
+          echo "bootstrap: $(find "$P" -name SKILL.md 2>/dev/null | wc -l) skill, start.sh=$([ -x "$P/start.sh" ] && echo ada)"
+
       # Selepas fail pulih barulah proses dijalankan — bot perlukan failnya dahulu.
       - name: Mula semula proses kau
         continue-on-error: true
