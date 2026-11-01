@@ -74,9 +74,30 @@ Kunci provider **tidak** disimpan dalam blob simpanan — ia datang dari GitHub 
 pada setiap boot (`TELEGRAM_BOT_TOKEN`, `GEMINI_API_KEY`, `GROQ_API_KEY`, `TOKENOMIX_API_KEY`,
 `TOKENHARBOR_KEY`).
 
-**Had yang perlu kau tahu:** `keys.db` bercabang. Kunci API yang dicipta melalui Telegram
-*semasa laptop mati* (bot di nod) akan hilang bila laptop hidup semula, kerana PC pegang
-salinan sendiri. Guna `/getkey` hanya bila laptop hidup.
+## Agen Hermes di nod — bukan sekadar chatbot
+
+`/agent` dan setiap tugasan aksi dalam Telegram dijalankan oleh **Hermes Agent v0.19.0
+sebenar** di nod, bukan di PC kau. Ia dipasang semula oleh `start.sh` pada setiap boot
+(venv sengaja tidak masuk blob simpanan supaya push 2-minit kekal kecil).
+
+Apa yang terbukti pada nod (ujian sebenar, bukan andaian):
+
+| Keupayaan | Bukti |
+|---|---|
+| Alat terminal | `uname -s` → `Linux`, `hostname` → `runnervm48cm3` |
+| Alat fail | tulis + baca semula `/tmp/boz-agent.txt` → `AGENT-OK-NOD` |
+| Alat carian web | carian + URL sumber dikembalikan |
+| Skills | 9 skill dibawa dari repo; `skill_view` membaca teks sebenar |
+| auto_load | `tool-discipline` + `elyy-ops-atlas` disuntik setiap panggilan |
+
+**Model:** `9router` hanya hidup di PC (`127.0.0.1:20128`), jadi ia tidak wujud di nod.
+`TELEKEY_AGENT_PLAN` (lalai `deepseek-v4.1-flash|tokenomix`) menukar model agen tanpa
+mengubah kod. Provider disediakan `make-config.py` daripada `.env`.
+
+**Had sebenar:** `keys.db` bercabang — kunci API yang dicipta melalui Telegram *semasa laptop
+mati* akan hilang bila laptop hidup semula. Guna `/getkey` hanya bila laptop hidup. Alat
+`browser` belum ada Playwright di nod, jadi automasi pelayar tidak tersedia; `web`, `terminal`,
+`file`, `code_execution` semuanya jalan.
 
 ---
 
