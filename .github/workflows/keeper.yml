@@ -1,0 +1,44 @@
+name: keeper
+# Penjaga di AWAN. Tanpa ini, rantaian nod bergantung pada cron di PC BOZ —
+# dan mati bila laptop ditutup. Di sini ia hidup dalam GitHub sendiri.
+#
+# Tugasnya: kalau tiada nod berjalan, hidupkan satu. Itu sahaja.
+# Nod sendiri menghantar pengganti 60 saat sebelum tamat (self-chain), jadi
+# failover biasa tidak menunggu cron ini; ini jaring keselamatan bila run mati
+# awal (gagal, dibatalkan, mesin dicabut).
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: read
+  issues: read
+
+concurrency:
+  group: keeper
+  cancel-in-progress: false
+
+jobs:
+  keep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Pastikan ada nod hidup
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -eu
+          RUNNING=$(gh run list --workflow=ephemeral-node.yml --limit 8 \
+            --json status --jq '[.[] | select(.status=="in_progress" or .status=="queued" or .status=="waiting")] | length')
+          echo "nod aktif: $RUNNING"
+          if [ "$RUNNING" -gt 0 ]; then
+            echo "nod masih hidup — langkau (tiada tindihan, tiada 409 Telegram)"
+            exit 0
+          fi
+          echo "tiada nod — menghantar pengganti"
+          gh workflow run ephemeral-node.yml -f minutes=350 -f port=45001
+          echo "dihantar. Nod akan sedia dalam ~2-3 minit."

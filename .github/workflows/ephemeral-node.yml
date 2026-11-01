@@ -132,4 +132,12 @@ jobs:
         run: |
           nohup bash state.sh watch > /tmp/state-watch.log 2>&1 &
           echo "segerak fail: pid $!"
-          sleep "$(( ${{ inputs.minutes }} * 60 ))"
+          TOTAL=$(( ${{ inputs.minutes }} * 60 ))
+          # Hantar pengganti 60 saat SEBELUM tamat. Nod baru boot (~40s) sambil
+          # nod ini masih hidup, jadi jurang perkhidmatan hanya puluhan saat
+          # dan tidak ada dua nod berpoll serentak (409).
+          sleep $(( TOTAL - 60 ))
+          echo "menghantar pengganti (self-chain)..."
+          gh workflow run ephemeral-node.yml -f minutes=350 -f port=45001 \
+            && echo "pengganti dihantar" || echo "AMARAN: gagal hantar pengganti"
+          sleep 60

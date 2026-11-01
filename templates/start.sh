@@ -14,6 +14,20 @@ cd "$(dirname "$0")" || exit 1
 # Kunci provider datang dari .env (ditulis workflow dari Actions secrets).
 # Tanpanya make-config.py tidak dapat menjana config.yaml untuk agen.
 [ -f ./.env ] && { set -a; . ./.env; set +a; }
+
+# --- 0. Kunci 9router ke .env SEBELUM bot hidup --------------------------------
+# 9router belum perlu berjalan: kuncinya sudah ada dalam DB yang dipulihkan.
+# Tanpa langkah ini, bot yang dihidupkan awal akan terkunci pada provider awan
+# kerana load_config() menyelesaikan kunci sekali sahaja semasa mula.
+if [ -f ./nine/db/data.sqlite ] && ! grep -q '^HERMES_CUSTOM_9ROUTER_API_KEY=' ./.env 2>/dev/null; then
+  _K=$(python3 -c "import sqlite3;c=sqlite3.connect('file:./nine/db/data.sqlite?mode=ro',uri=True);r=c.execute('select key from apiKeys where isActive=1 limit 1').fetchone();print(r[0] if r else '')" 2>/dev/null)
+  if [ -n "${_K:-}" ]; then
+    printf 'HERMES_CUSTOM_9ROUTER_API_KEY=%s\n' "$_K" >> ./.env
+    chmod 600 ./.env
+    HERMES_CUSTOM_9ROUTER_API_KEY="$_K"; export HERMES_CUSTOM_9ROUTER_API_KEY
+    echo "kunci 9router ditulis ke .env" >> start.log
+  fi
+fi
 STAMP=$(date -u '+%F %T')
 echo "=== $STAMP pada $(hostname) ===" >> start.log
 echo "start.sh jalan pada $STAMP di $(hostname)" > start-result.txt
@@ -25,6 +39,18 @@ if ! python3 -c "import telegram" >/dev/null 2>&1; then
   pip install -q --break-system-packages "python-telegram-bot==22.*" >> start.log 2>&1 \
     || pip3 install -q --break-system-packages "python-telegram-bot==22.*" >> start.log 2>&1 \
     || echo "GAGAL memasang PTB - bot mungkin tidak jalan" >> start.log
+fi
+
+# --- 1a. PENUNGGU DAHULU -------------------------------------------------------
+# Bot mesti boleh ambil alih secepat mungkin selepas boot. Pemasangan berat
+# (Hermes 356MB, 9router 134MB, Chromium 120MB) mengambil 2-3 minit; kalau ia
+# didahulukan, setiap pertukaran nod bermakna 3 minit bot mati. Jadi penunggu
+# dihidupkan dahulu — ia guna provider awan dahulu, kemudian naik ke Mistral
+# melalui 9router sebaik sahaja ia sedia.
+if [ -f "$PWD/telekey/standby.sh" ] && ! { [ -f "$PWD/standby.pid" ] && kill -0 "$(cat "$PWD/standby.pid")" 2>/dev/null; }; then
+  nohup bash "$PWD/telekey/standby.sh" >> standby.out 2>&1 &
+  echo $! > "$PWD/standby.pid"
+  echo "penunggu dihidupkan lebih awal (pid $!)" >> start.log
 fi
 
 # --- 1b. Agen Hermes (untuk /agent dan laluan agen) --------------------------
