@@ -58,7 +58,36 @@ am_owner() {
     _owner_cache_ts=$now
   fi
   [ -z "$_owner_cache" ] && return 0  # tiada maklumat: fail-open
-  [ "$_owner_cache" = "$run" ]
+  [ "$_owner_cache" = "$run" ] && return 0
+  # Owner dalam issue boleh basi (nod mati menulis OWNER terakhir, atau run ujian
+  # pendek menimpanya). Id run GitHub menaik, jadi id lebih BESAR = lebih baru:
+  # nod yang lebih baru mengambil alih dan menulis semula OWNER.
+  if [ "$run" -gt "$_owner_cache" ]; then
+    claim_owner
+    return 0
+  fi
+  return 1
+}
+
+claim_owner() {
+  local tok num body new
+  tok="${GH_TOKEN:-${GITHUB_TOKEN:-}}"
+  [ -z "$tok" ] && return 0
+  num=$(curl -sS -m 10 -H "Authorization: Bearer $tok" \
+        "https://api.github.com/repos/Solelyy4/boz-lab-node/issues?state=open&per_page=10" 2>/dev/null \
+        | tr ',' '\n' | grep -o '"number":[0-9]*' | head -1 | cut -d: -f2)
+  [ -z "$num" ] && return 0
+  body=$(curl -sS -m 10 -H "Authorization: Bearer $tok" \
+        "https://api.github.com/repos/Solelyy4/boz-lab-node/issues/$num" 2>/dev/null \
+        | python3 -c 'import json,sys;print(json.load(sys.stdin).get("body",""))' 2>/dev/null)
+  [ -z "$body" ] && return 0
+  new=$(printf '%s\n' "$body" | sed "s/^OWNER=[0-9]*/OWNER=$GITHUB_RUN_ID/")
+  printf '%s\n' "$new" | python3 -c 'import json,sys;print(json.dumps({"body":sys.stdin.read()}))' \
+    | curl -sS -m 15 -X PATCH -H "Authorization: Bearer $tok" \
+        -H "Accept: application/vnd.github+json" \
+        --data @- "https://api.github.com/repos/Solelyy4/boz-lab-node/issues/$num" >/dev/null 2>&1
+  _owner_cache="$GITHUB_RUN_ID"
+  say "ambil alih pemilikan (OWNER=$GITHUB_RUN_ID)"
 }
 
 say "penunggu bermula (fresh=${FRESH}s, semak tiap ${CHECK}s)"

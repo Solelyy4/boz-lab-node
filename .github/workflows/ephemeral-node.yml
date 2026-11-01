@@ -56,6 +56,7 @@ jobs:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           TOKENOMIX_API_KEY: ${{ secrets.TOKENOMIX_API_KEY }}
           TOKENHARBOR_KEY: ${{ secrets.TOKENHARBOR_KEY }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           umask 077
           mkdir -p "$HOME/persist/secrets"
@@ -67,6 +68,7 @@ jobs:
             printf 'HERMES_HOME=%s\n'        "$HOME/persist"
             printf 'TELEKEY_PORT=8766\n'
             printf 'GITHUB_RUN_ID=%s\n'      "$GITHUB_RUN_ID"
+            printf 'GH_TOKEN=%s\n'           "$GH_TOKEN"
           } > "$HOME/persist/.env"
           chmod 600 "$HOME/persist/.env"
           printf '%s' "$TOKENHARBOR_KEY" > "$HOME/persist/secrets/tokenharbor.key"
