@@ -1,0 +1,89 @@
+{
+  "daily_cap": 20000,
+  "daily_token_cap": 5000000,
+  "chat_daily_cap": 2000,
+  "agent_daily_cap": 200,
+  "agent_timeout_s": 600,
+  "agent_tiers": {
+    "hard": {
+      "model": "mistral/codestral-latest",
+      "provider": "9router",
+      "timeout": 700
+    },
+    "medium": {
+      "model": "mistral/ministral-8b-latest",
+      "provider": "9router",
+      "timeout": 420
+    },
+    "easy": {
+      "model": "mistral/ministral-8b-latest",
+      "provider": "9router",
+      "timeout": 360
+    },
+    "max": {
+      "model": "mistral/mistral-large-4",
+      "provider": "9router",
+      "timeout": 900
+    }
+  },
+  "upstream": [
+    {
+      "name": "9r-codestral",
+      "base_url": "http://127.0.0.1:20128/v1",
+      "model": "mistral/codestral-latest",
+      "api_key_env": "HERMES_CUSTOM_9ROUTER_API_KEY",
+      "timeout": 60,
+      "tier": "chat",
+      "speed": 1
+    },
+    {
+      "name": "9r-ministral",
+      "base_url": "http://127.0.0.1:20128/v1",
+      "model": "mistral/ministral-8b-latest",
+      "api_key_env": "HERMES_CUSTOM_9ROUTER_API_KEY",
+      "timeout": 60,
+      "tier": "chat",
+      "speed": 2
+    },
+    {
+      "name": "groq-fast",
+      "base_url": "https://api.groq.com/openai/v1",
+      "model": "qwen/qwen3.8-27b",
+      "api_key_env": "GROQ_API_KEY",
+      "timeout": 30,
+      "tier": "chat",
+      "speed": 3
+    },
+    {
+      "name": "openrouter-free",
+      "base_url": "https://openrouter.ai/api/v1",
+      "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+      "api_key_env": "OPENROUTER_API_KEY_MANUAL",
+      "timeout": 90,
+      "tier": "chat",
+      "speed": 4
+    },
+    {
+      "name": "9r-large4",
+      "base_url": "http://127.0.0.1:20128/v1",
+      "model": "mistral/mistral-large-4",
+      "api_key_env": "HERMES_CUSTOM_9ROUTER_API_KEY",
+      "timeout": 120,
+      "tier": "chat",
+      "speed": 9,
+      "enabled": false,
+      "note": "model reasoning: content hanya blok thinking melalui gateway — dipakai sebagai otak agen (hard), bukan chat"
+    },
+    {
+      "name": "tokenharbor",
+      "base_url": "https://tokenharbor.ai/v1",
+      "model": "mimo-v2.5:free",
+      "api_key_file": "$HERMES_HOME/secrets/tokenharbor.key",
+      "timeout": 90,
+      "tier": "chat",
+      "speed": 9,
+      "enabled": false,
+      "note": "free allowance habis sampai 5 Nov 2026 11:50 UTC; saldo berbayar $0"
+    }
+  ]
+}

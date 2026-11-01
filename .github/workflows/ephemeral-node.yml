@@ -85,7 +85,11 @@ jobs:
           cp make-config.py "$P/make-config.py"
           # Semak ISI, bukan kewujudan dir: blob lama boleh simpan dir kosong,
           # dan `[ -d ]` akan langkau salinan lalu skills hilang senyap.
-          [ -f "$P/telekey/telekey.py" ] || cp -r telekey "$P/telekey"
+          # telekey.py/standby.sh ialah kod yang dihantar repo — sentiasa segar.
+          # keys.db (data pengguna) TIDAK disentuh.
+          mkdir -p "$P/telekey"
+          cp telekey/telekey.py telekey/config.json "$P/telekey"/
+          cp telekey/standby.sh "$P/telekey/standby.sh"; chmod +x "$P/telekey/standby.sh"
           mkdir -p "$P/skills"
           cp -r skills/. "$P/skills"/
           echo "bootstrap: $(find "$P/skills" -name SKILL.md 2>/dev/null | wc -l) skill, start.sh=$([ -x "$P/start.sh" ] && echo ada)"
