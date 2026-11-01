@@ -188,13 +188,15 @@ bore_pid() {
 start_tunnel() {
   local b; b="$(bore_bin)"
   stop_tunnel quiet
-  local args=(local "$SSH_PORT_TARGET" --to "$PUBLIC_HOST")
-  [ "$REQ_PORT" != "0" ] && args+=(--port "$REQ_PORT")
-
-  # Port tetap: kalau nod lama belum lepas port, cuba semula sampai 12 minit.
-  # Ini yang membolehkan alamat SSH kekal sama selepas pertukaran nod.
-  local attempt max=36
-  for attempt in $(seq 1 "$max"); do
+  # Port tetap diutamakan supaya alamat kekal. Tetapi klien bore zombie (dari
+  # run yang di-cancel) boleh memegang port itu berjam-jam di pelayan, dan ia
+  # menyekat SEMUA pengganti. Jadi selepas ~2 minit kita beralih ke port rawak
+  # dan laporkan port itu; keeper/boz-ssh membaca port dari issue, bukan hardcode.
+  local want="$REQ_PORT" attempt=0 max=6
+  while :; do
+    attempt=$((attempt + 1))
+    local args=(local "$SSH_PORT_TARGET" --to "$PUBLIC_HOST")
+    [ "$want" != "0" ] && args+=(--port "$want")
     : > "$STATE_DIR/bore.log"
     nohup "$b" "${args[@]}" >> "$STATE_DIR/bore.log" 2>&1 &
     local p=$!
@@ -208,10 +210,14 @@ start_tunnel() {
     done
     [ "$ok" = "1" ] && break
     kill "$p" 2>/dev/null || true
-    if [ "$REQ_PORT" = "0" ] || [ "$attempt" = "$max" ]; then
+    if [ "$attempt" -ge "$max" ]; then
+      if [ "$want" != "0" ]; then
+        say "port $want masih dipegang nod lain — beralih ke port rawak" >&2
+        want=0; attempt=0; max=2; continue
+      fi
       die "bore gagal: $(tail -n 2 "$STATE_DIR/bore.log" | tr '\n' ' ')"
     fi
-    say "port $REQ_PORT belum bebas (cubaan $attempt/$max) — tunggu 20s" >&2
+    say "port $want belum bebas (cubaan $attempt/$max) — tunggu 20s" >&2
     sleep 20
   done
 

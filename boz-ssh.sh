@@ -8,9 +8,22 @@
 # Fail kau ada di ~/persist — kekal walaupun nod berganti.
 set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PORT="${PORT:-45001}"
 KEY="${KEY:-$HERE/keys/boz_lab}"
 HOSTUSER="${HOSTUSER:-runner@bore.pub}"
+
+# Port diambil dari issue node-status: nod boleh jatuh ke port rawak bila port
+# tetap dipegang klien zombie, jadi 45001 bukan lagi jaminan.
+if [ -z "${PORT:-}" ]; then
+  if command -v gh >/dev/null 2>&1; then GHBIN="gh"
+  elif [ -x "${LOCALAPPDATA:-}/hermes/bin/gh.exe" ]; then GHBIN="$LOCALAPPDATA/hermes/bin/gh.exe"
+  else GHBIN=""; fi
+  if [ -n "$GHBIN" ]; then
+    PORT="$("$GHBIN" issue list --repo "${REPO_SLUG:-Solelyy4/boz-lab-node}" \
+              --search 'node-status in:title' --json body --jq '.[0].body' 2>/dev/null \
+            | sed -n 's/^PORT=\([0-9][0-9]*\).*/\1/p' | head -1)"
+  fi
+fi
+PORT="${PORT:-45001}"
 
 [ -f "$KEY" ] || { echo "kunci tidak dijumpai: $KEY" >&2; exit 1; }
 

@@ -12,7 +12,6 @@ set -uo pipefail
 
 REPO="${REPO:-Solelyy4/boz-lab-node}"
 WF="${WF:-ephemeral-node.yml}"
-PORT="${PORT:-45001}"
 MINUTES="${MINUTES:-350}"
 LEAD="${LEAD:-480}"          # saat sebelum tamat untuk mula hidupkan pengganti
 LOG="${LOG:-$HOME/.boz-node/keeper.log}"
@@ -23,6 +22,16 @@ log() { printf '[%s] %s\n' "$(date '+%F %T')" "$*" >> "$LOG"; }
 if command -v gh >/dev/null 2>&1; then GH="gh"
 elif [ -x "${LOCALAPPDATA:-}/hermes/bin/gh.exe" ]; then GH="$LOCALAPPDATA/hermes/bin/gh.exe"
 else log "gh tidak dijumpai"; exit 1; fi
+
+# Port TIDAK dikunci lagi: nod beralih ke port rawak bila 45001 dipegang klien
+# zombie. Nod melaporkan port sebenar dalam issue; di situlah sumber kebenaran.
+issue_port() {
+  "$GH" issue list --repo "$REPO" --search 'node-status in:title' --json body --jq '.[0].body' 2>/dev/null \
+    | sed -n 's/^PORT=\([0-9][0-9]*\).*/\1/p' | head -1
+}
+PORT="${PORT:-$(issue_port)}"
+PORT="${PORT:-45001}"
+REQ_PORT="${REQ_PORT:-45001}"   # port yang DIMINTA daripada workflow (bukan semestinya dapat)
 
 now=$(date -u +%s)
 
@@ -40,7 +49,7 @@ else
   if [ "$n" -ge 2 ] || [ "${1:-}" = "--force" ]; then
     log "tunnel mati walaupun run hidup — hantar pengganti"
     date -u +%s > "$HOME/.boz-node/last_dispatch"
-    "$GH" workflow run "$WF" --repo "$REPO" -f minutes="$MINUTES" -f port="$PORT" >/dev/null 2>&1 \
+    "$GH" workflow run "$WF" --repo "$REPO" -f minutes="$MINUTES" -f port="$REQ_PORT" >/dev/null 2>&1 \
       && log "pengganti dihantar (port mati)" || log "GAGAL menghantar pengganti"
     rm -f "$FAILF"
     exit 0
@@ -73,6 +82,6 @@ else
   log "tiada nod sah — hidupkan baru"
 fi
 
-"$GH" workflow run "$WF" --repo "$REPO" -f minutes="$MINUTES" -f port="$PORT" >/dev/null 2>&1 \
+"$GH" workflow run "$WF" --repo "$REPO" -f minutes="$MINUTES" -f port="$REQ_PORT" >/dev/null 2>&1 \
   && { date -u +%s > "$STAMP"; log "pengganti dihantar (port $PORT, $MINUTES min)"; } \
   || { log "GAGAL menghantar pengganti"; echo "keeper: GAGAL menghantar pengganti nod — semak $LOG"; }
