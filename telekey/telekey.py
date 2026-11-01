@@ -705,6 +705,20 @@ def run_selftest(timeout=240):
         return False, f"{type(e).__name__}: {e}"
 
 
+def _router_alive():
+    """9router hidup di PC sahaja. Port tertutup = kita di nod awan."""
+    import socket
+    s = socket.socket()
+    s.settimeout(1.5)
+    try:
+        s.connect(("127.0.0.1", 20128))
+        return True
+    except Exception:
+        return False
+    finally:
+        s.close()
+
+
 def _agent_core(prompt, tier="medium", timeout=None):
     """Agen Hermes sebenar via `hermes -z` — model 9router Mistral ikut tier.
     Model inilah yang dapat skills + tools penuh. Balas (output|None, err|None, nota)."""
@@ -715,17 +729,22 @@ def _agent_core(prompt, tier="medium", timeout=None):
     spec = tiers.get(tier) or tiers.get("medium") or DEFAULT_AGENT_TIERS["medium"]
     tmo = timeout or int(spec.get("timeout") or AGENT_TIMEOUT_S)
     plan = [(spec.get("model"), spec.get("provider"))]
-    # Nod awan: 9router hanya hidup di PC, jadi ia tiada di sana. TELEKEY_AGENT_PLAN
-    # (format "model|provider,model|provider") menimpa rancangan tanpa ubah kod.
+    # 9router hanya hidup di PC (127.0.0.1:20128). Di nod awan port itu tertutup,
+    # jadi rancangan mesti bertukar sendiri: PC -> 9router Mistral, nod -> awan.
     override = (os.environ.get("TELEKEY_AGENT_PLAN") or "").strip()
-    if override:
+    if override and not _router_alive():
         plan = []
         for item in override.split(","):
             if "|" in item:
                 m, p = item.split("|", 1)
                 plan.append((m.strip(), p.strip()))
-    for m, p in AGENT_FALLBACK:
-        if not override and (m, p) not in plan:
+    else:
+        alive = _router_alive()
+        for m, p in AGENT_FALLBACK:
+            if (m, p) in plan:
+                continue
+            if not alive and p == "9router":
+                continue      # jangan buang masa 420s pada port yang tertutup
             plan.append((m, p))
     last = "tiada percubaan"
     prof = "lite" if str(tier) in ("easy", "medium") else "default"

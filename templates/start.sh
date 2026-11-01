@@ -43,6 +43,15 @@ if [ -x "$PWD/hvenv/bin/python" ] && [ -f "$PWD/make-config.py" ]; then
   "$PWD/hvenv/bin/python" "$PWD/make-config.py" >> start.log 2>&1 \
     && echo "config.yaml agen dijana" >> start.log
 fi
+# Pelayar: chromium ~120MB, cache di ~/.cache (bukan persist) jadi ia hilang
+# setiap boot. Tanpa ini alat browser dalam /agent gagal.
+if [ -x "$PWD/hvenv/bin/python" ] && [ ! -d "$HOME/.cache/ms-playwright" ]; then
+  echo "memasang playwright + chromium" >> start.log
+  "$PWD/hvenv/bin/pip" install -q playwright >> start.log 2>&1 \
+    && "$PWD/hvenv/bin/playwright" install chromium >> start.log 2>&1 \
+    && echo "chromium sedia" >> start.log \
+    || echo "GAGAL playwright - alat browser tiada" >> start.log
+fi
 
 # --- 2. Hidupkan penunggu -----------------------------------------------------
 if [ -f standby.pid ] && kill -0 "$(cat standby.pid)" 2>/dev/null; then
