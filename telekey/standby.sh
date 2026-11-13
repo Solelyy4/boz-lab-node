@@ -17,7 +17,12 @@ export HERMES_HOME="$(cd "$HERE/.." && pwd)"   # .env + secrets/ ada di sini
 # Nod tiada 9router (ia hidup di PC). Rancangan model agen ditimpa di sini.
 export TELEKEY_AGENT_PLAN="${TELEKEY_AGENT_PLAN:-deepseek-v4.1-flash|tokenomix,deepseek-v4-flash|tokenomix}"
 
-HB_URL="${HB_URL:-https://gist.githubusercontent.com/Solelyy4/d5cdf07feb91d5d89337476d2f9db7ae/raw/alive}"
+# NADI BOZ — sumber UTAMA kini fail dalam repo (raw CDN, TIADA had API GitHub).
+# Gist lama dikekalkan sebagai sandaran kerana API gist kena had 5000/jam
+# (terbukti 13 Nov 2026: "API rate limit exceeded for user ID 330849825" ->
+# NADI GAGAL HTTP 403 -> nadi basi -> nod rampas token -> bot awan 409 BISU).
+HB_URL="${HB_URL:-https://raw.githubusercontent.com/Solelyy4/boz-cloud-runner/master/NADI}"
+HB_URL_SANDARAN="${HB_URL_SANDARAN:-https://gist.githubusercontent.com/Solelyy4/d5cdf07feb91d5d89337476d2f9db7ae/raw/alive}"
 FRESH="${FRESH:-180}"     # nadi lebih muda dari ini = PC hidup
 CHECK="${CHECK:-45}"      # selang pemeriksaan
 BOT_CMD="${BOT_CMD:-python3 $HERE/telekey.py}"   # boleh diganti untuk ujian/logik sahaja
@@ -27,13 +32,21 @@ PIDF="$HERE/telekey.pid"
 say() { echo "[$(date -u '+%F %T')] $*" >> "$LOG"; }
 
 hb_age() {
-  local f now
+  local f now cuba url
   now="$(date -u +%s)"
-  # ?cb= WAJIB: gist.githubusercontent.com di-cache CDN ~5 minit. Tanpa ini
-  # nod melihat nadi basi walaupun PC sihat, lalu merampas poll.
-  f="$(curl -sS -m 10 "$HB_URL?cb=$now" 2>/dev/null | tr -dc '0-9')"
-  [ -n "$f" ] || { echo 999999; return; }
-  echo $(( now - f ))
+  # ?cb= WAJIB: CDN cache ~5 minit. Tanpa ini, nod melihat nadi basi walaupun
+  # PC sihat, lalu merampas poll.
+  # Cuba sumber UTAMA (repo, tiada had API) dahulu, kemudian sandaran (gist).
+  for url in "$HB_URL" "${HB_URL_SANDARAN:-}"; do
+    [ -z "$url" ] && continue
+    f="$(curl -sS -m 10 "$url?cb=$now" 2>/dev/null | tr -dc '0-9')"
+    # Nadi sah mestilah masa epoch yang munasabah (10 digit, dalam +/- 1 hari).
+    if [ -n "$f" ] && [ "${#f}" -ge 10 ]; then
+      echo $(( now - f ))
+      return
+    fi
+  done
+  echo 999999
 }
 
 running() { [ -f "$PIDF" ] && kill -0 "$(cat "$PIDF")" 2>/dev/null; }
