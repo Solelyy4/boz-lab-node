@@ -104,6 +104,30 @@ claim_owner() {
 }
 
 say "penunggu bermula (fresh=${FRESH}s, semak tiap ${CHECK}s)"
+
+# --- KAWALAN PENGGANTI: jangan rampas token bot awan ---------------------------
+#
+# BUKTI 13 Nov 2026 (bot BISU berulang walaupun nadi sihat):
+#   Nod ini merampas TELEGRAM_BOT_TOKEN setiap kali nadi dilihat basi. Bot awan
+#   (boz-cloud-runner) memakai TOKEN YANG SAMA -> 409 -> adapter PARKED -> bisu.
+#   Masalahnya: nadi yang dibaca (gist) mati kerana API kena had
+#   ("API rate limit exceeded for user ID 330849825" -> NADI GAGAL 403), jadi
+#   nod percaya PC mati SELAMANYA lalu merampas SELAMANYA.
+#
+#   Tambahan pula, `ensure_cloud.sh` (cron 15m) memulakan semula bot awan tanpa
+#   sedar nod sedang memegang token -> gelung abadi tanpa penghujung.
+#
+# PENYELESAIAN: nod HANYA boleh rampas bila BOZ benar-benar mahu. Kawalan
+# eksplisit melalui fail/suis, bukan tekaan daripada nadi. Lalai = JANGAN
+# rampas, kerana bot awan ialah saluran utama BOZ.
+if [ "${NOD_BOLEH_REBUT:-0}" != "1" ]; then
+  say "penangkapan DIMATIKAN (NOD_BOLEH_REBUT != 1) — nod tidak akan merampas token"
+  say "bot awan boz-cloud-runner ialah saluran utama; nod ini kekal siaga sahaja"
+  while :; do
+    sleep 3600
+  done
+fi
+
 while :; do
   age="$(hb_age)"
   if [ "$age" -lt "$FRESH" ]; then
